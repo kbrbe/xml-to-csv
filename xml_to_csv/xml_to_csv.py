@@ -64,8 +64,7 @@ def getValueList(elem, config, configKey):
               vNorm = utils.parseDate(vText, datePatterns)
               recordData[columnName].append(vNorm)
             elif valueType == 'text':
-              vNorm = utils.getNormalizedString(vText)
-              recordData[columnName].append(vNorm)
+              recordData[columnName].append(vText)
             elif valueType == 'isniURL':
               isniComponents = vText.split('isni.org/isni/')
               if len(isniComponents) > 1:
