@@ -1,0 +1,258 @@
+#
+# (c) 2024 Sven Lieber
+# KBR Brussels
+#
+import lxml.etree as ET
+import os
+import json
+import itertools
+import enchant
+import hashlib
+import csv
+from contextlib import ExitStack
+from argparse import ArgumentParser
+from tqdm import tqdm
+import xml_to_csv.utils as utils
+import stdnum
+
+NS_MARCSLIM = 'http://www.loc.gov/MARC21/slim'
+ALL_NS = {'marc': NS_MARCSLIM}
+
+
+# -----------------------------------------------------------------------------
+def getValueList(elem, config, configKey):
+
+  datePatterns = config["datePatterns"]
+  keyParts = []
+
+  # first check if we can extract the data we should extract
+  #
+  if configKey not in config:
+    print(f'No key "{configKey}" in config!')
+    return None
+
+  recordID = utils.getElementValue(elem.find(config['recordIDExpression'], ALL_NS))
+
+  # initialize the dictionary for the output CSV of this record
+  recordData = {f["columnName"]: [] for f in config["dataFields"]}
+  recordData[config["recordIDColumnName"]] = recordID
+
+  # check each datafield description config entry
+  #
+  for p in config[configKey]:
+    expression = p['expression']
+    columnName = p['columnName']
+    values = None
+
+    # extract the data by using xpath
+    #
+    values = elem.xpath(expression, namespaces=ALL_NS)
+
+    # process all extracted data (possibly more than one value)
+    #
+    if values:
+      for v in values:
+        vText = v.text
+        vNorm = None
+
+        if vText:
+          # parse different value types, for example dates or regular strings
+          #
+          if 'valueType' in p:
+            valueType = p['valueType']
+            if valueType == 'date':
+              vNorm = utils.parseDate(vText, datePatterns)
+              recordData[columnName].append(vNorm)
+            elif valueType == 'text':
+              vNorm = utils.getNormalizedString(vText)
+              recordData[columnName].append(vNorm)
+            elif valueType == 'isniURL':
+              isniComponents = vText.split('isni.org/isni/')
+              if len(isniComponents) > 1:
+                vNorm = isniComponents[1]
+                recordData[columnName].append(vNorm)
+              else:
+                print(f'Warning: malformed ISNI URL for authority {recordID}: "{vText}"')
+            elif valueType == 'bnfURL':
+              bnfComponents = vText.split('ark:/12148/')
+              if len(bnfComponents) > 1:
+                vNorm = bnfComponents[1]
+                recordData[columnName].append(vNorm)
+              else:
+                print(f'Warning: malformed BnF URL for authority {recordID}: "{vText}"')
+
+            else:
+              print(f'Unknown value type "{valueType}"')
+
+  recordData = {k:"" if not v else v for k,v in recordData.items()}
+  return recordData
+
+# -----------------------------------------------------------------------------
+def getRecordTagName(config):
+
+  recordTagString = config['recordTag']
+  recordTag = None
+  if ':' in recordTagString:
+    prefix, tagName = recordTagString.split(':')
+    recordTag = ET.QName(ALL_NS[prefix], tagName)
+  else:
+    recordTag = recordTagString
+
+  return recordTag
+
+
+# -----------------------------------------------------------------------------
+def countRecords(filename, config):
+  # if the XML file is huge, memory becomes an issue even while streaming because a reference to the parent is kept
+  # therefore we first get the root element
+  # https://stackoverflow.com/questions/12160418/why-is-lxml-etree-iterparse-eating-up-all-my-memory
+  context = ET.iterparse(filename, events=('start', 'end'))
+  context = iter(context)
+  event, root = next(context)
+
+  recordTag = getRecordTagName(config)
+
+  recordCounter = 0
+  counterThresholdPrint = 100000
+  # now we iterate over the children of the root and always clear the root information
+  for event, elem in context:
+    if  event == 'end' and elem.tag == recordTag:
+      if recordCounter != 0 and recordCounter % counterThresholdPrint == 0:
+        print(f'... still busy, just passed {recordCounter:,} records')
+      recordCounter += 1
+      root.clear()
+      elem.clear()
+
+  print(f'{recordCounter} records found!')
+  return recordCounter
+
+
+
+# -----------------------------------------------------------------------------
+def main(inputFilename, outputFilename, configFilename, prefix):
+  """This script reads an XML file in MARC slim format and extracts several fields to create a CSV file."""
+
+
+  with open(configFilename, 'r') as configFile:
+    config = json.load(configFile)
+  
+  recordTag = getRecordTagName(config)
+  
+  #
+  # Instead of loading everything to main memory, stream over the XML using iterparse
+  #
+  with open(outputFilename, 'w') as outFile:
+
+
+    # Create a dictionary with file pointers
+    # Because ExitStack is used, it is as of each of the file pointers has their own "with" clause
+    # This is necessary, because the selected columns and thus possible output file pointers are variable
+    # In the code we cannot determine upfront how many "with" statements we would need
+    with ExitStack() as stack:
+      files = { columnName : csv.DictWriter(open(f'{prefix}-{columnName}.csv', 'w'), fieldnames=[config["recordIDColumnName"], columnName], delimiter=',') for columnName in [field["columnName"] for field in config["dataFields"]] }
+
+      outputFields = [config["recordIDColumnName"]] + [f["columnName"] for f in config["dataFields"]]
+      outputWriter = csv.DictWriter(outFile, fieldnames=outputFields, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+      
+      # write the CSV header for the output file
+      outputWriter.writeheader()
+
+      # write the CSV header for the per-column output files (1:n relationships)
+      if prefix != "":
+        for filename, fileHandle  in files.items():
+          fileHandle.writeheader()
+
+      #
+      # Usually parsing the XML first to determine the number of records is fast
+      # However, for KBR person XML files this takes a long time
+      # Thus we separately instantiate tqdm and parse on the run
+      # unfortunately we don't see the progress then in terms of percentage
+      #print(f'Computing size such that we can show a progress bar ...')
+      #recordCounter = countRecords(inputFilename, config)
+      pbar = tqdm(position=0)
+
+      # if the XML file is huge, memory becomes an issue even while streaming because a reference to the parent is kept
+      # therefore we first get the root element
+      # https://stackoverflow.com/questions/12160418/why-is-lxml-etree-iterparse-eating-up-all-my-memory
+      context = ET.iterparse(inputFilename, events=('start', 'end'))
+      context = iter(context)
+      event, root = next(context)
+
+      recordCounter = 0
+      filteredRecordCounter = 0
+      filteredRecordExceptionCounter = 0
+
+      updateFrequency = 1000
+      # now we iterate over the children of the root and always clear the root information
+      for event, elem in context:
+
+        # The parser finished reading one authority record, get information and then discard the record
+        if  event == 'end' and elem.tag == recordTag:
+          if "recordFilter" in config:
+            try:
+              if not utils.passFilter(elem, config["recordFilter"]):
+                filteredRecordCounter += 1
+                if recordCounter % updateFrequency == 0:
+                  pbar.set_description(f'total: {recordCounter}; passed filter: {filteredRecordCounter}; could not apply filter: {filteredRecordExceptionCounter}')
+                  pbar.update(updateFrequency)
+                root.clear()
+                elem.clear()
+                continue
+            except Exception as e:
+                recordID = utils.getElementValue(elem.find(config['recordIDExpression'], ALL_NS))
+                #print(f'{recordID} {e}')
+                filteredRecordExceptionCounter += 1
+                if recordCounter % updateFrequency ==0:
+                  pbar.set_description(f'total: {recordCounter}; passed filter: {filteredRecordCounter}; could not apply filter: {filteredRecordExceptionCounter}')
+                  pbar.update(updateFrequency)
+                root.clear()
+                elem.clear()
+                continue
+          recordData = getValueList(elem, config, "dataFields")
+          outputWriter.writerow(recordData)
+
+          # Create a CSV output file for each selected column to resolve 1:n relationships
+          if prefix != "":
+            recordID = recordData[config["recordIDColumnName"]]
+            for columnName, valueList in recordData.items():
+              if valueList and columnName != config["recordIDColumnName"]:
+                for v in valueList:
+                  files[columnName].writerow({config["recordIDColumnName"]: recordID, columnName: v})
+                  
+
+          recordCounter += 1
+          if recordCounter % updateFrequency == 0:
+            if "recordFilter" in config:
+              pbar.set_description(f'total: {recordCounter}; passed filter: {filteredRecordCounter}; could not apply filter: {filteredRecordExceptionCounter}')
+            else:
+              pbar.set_description(f'total: {recordCounter}')
+            pbar.update(updateFrequency)
+          root.clear()
+          elem.clear()
+
+      # update the remaining count after the loop has ended
+      if recordCounter % updateFrequency != 0:
+        if "recordFilter" in config:
+          pbar.set_description(f'total: {recordCounter}; passed filter: {filteredRecordCounter}; could not apply filter: {filteredRecordExceptionCounter}')
+        else:
+          pbar.set_description(f'total: {recordCounter}')
+        pbar.update(updateFrequency)
+      filteredRecordCounterTotal = filteredRecordCounter + filteredRecordExceptionCounter
+      print(f'{recordCounter} records processed, {filteredRecordCounterTotal} filtered out (from which {filteredRecordCounter} did not pass the filter and {filteredRecordExceptionCounter} where the filter could not be applied!')
+
+# -----------------------------------------------------------------------------
+def parseArguments():
+
+  parser = ArgumentParser(description='This script reads an XML file in MARC slim format and extracts several fields to create a CSV file.')
+  parser.add_argument('-i', '--input-file', action='store', required=True, help='The input file containing MARC SLIM XML records')
+  parser.add_argument('-c', '--config-file', action='store', required=True, help='The config file with XPath expressions to extract')
+  parser.add_argument('-p', '--prefix', action='store', required=False, default='', help='If given, one file per column with this prefix will be generated to resolve 1:n relationships')
+  parser.add_argument('-o', '--output-file', action='store', required=True, help='The output CSV file containing extracted fields based on the provided config')
+  args = parser.parse_args()
+
+  return args
+
+
+if __name__ == '__main__':
+  args = parseArguments()
+  main(args.input_file, args.output_file, args.config_file, args.prefix)

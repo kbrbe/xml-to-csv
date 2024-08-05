@@ -1,0 +1,70 @@
+{
+  "datePatterns": ["%Y", "(%Y)", "[%Y]", "%Y-%m-%d", "%d/%m/%Y", "%Y%m%d"],
+  "recordTag": "marc:record",
+  "recordFilter": {
+    "expression": "./marc:datafield[@tag=\"100\"]/marc:subfield[@code=\"c\"]",
+    "condition": "equals",
+    "value": "p"
+  },
+  "recordIDExpression": "./marc:controlfield[@tag=\"001\"]",
+  "recordIDColumnName": "autID",
+  "dataFields": [
+    {
+      "columnName": "name",
+      "expression": "./marc:datafield[@tag=\"100\"]/marc:subfield[@code=\"a\"]",
+      "valueType": "text"
+    },
+    {
+      "columnName": "numeration",
+      "expression": "./marc:datafield[@tag=\"100\"]/marc:subfield[@code=\"b\"]",
+      "valueType": "text"
+    },
+    {
+      "columnName": "titles",
+      "expression": "./marc:datafield[@tag=\"100\"]/marc:subfield[@code=\"c\"]",
+      "valueType": "text"
+    },
+    {
+      "columnName": "dates",
+      "expression": "./marc:datafield[@tag=\"100\"]/marc:subfield[@code=\"d\"]",
+      "valueType": "text"
+    },
+    {
+      "columnName": "alternateNames",
+      "expression": "./marc:datafield[@tag=\"400\"]/marc:subfield[@code=\"a\"]",
+      "valueType": "text"
+    },
+    {
+      "columnName": "pseudonyms",
+      "expression": "./marc:datafield[@tag=\"500\"]/marc:subfield[@code=\"a\"]",
+      "valueType": "text"
+    },
+    {
+      "columnName": "birthDate",
+      "expression": "./marc:datafield[@tag=\"046\"]/marc:subfield[@code=\"f\"]",
+      "valueType": "text"
+    },
+    {
+      "columnName": "deathDate",
+      "expression": "./marc:datafield[@tag=\"046\"]/marc:subfield[@code=\"g\"]",
+      "valueType": "text"
+      
+    },
+    {
+      "columnName": "isni",
+      "expression": "./marc:datafield[@tag=\"024\"]/marc:subfield[@code=\"2\" and (text()=\"isni\" or text()=\"ISNI\")]/../marc:subfield[@code=\"a\"]",
+      "valueType": "text"
+    },
+    {
+      "columnName": "viaf",
+      "expression": "./marc:datafield[@tag=\"024\"]/marc:subfield[@code=\"2\" and (text()=\"viaf\" or text()=\"VIAF\")]/../marc:subfield[@code=\"a\"]",
+      "valueType": "text"
+    },
+    {
+      "columnName": "biographicalData",
+      "expression": "./marc:datafield[@tag=\"678\"]/marc:subfield[@code=\"a\"]",
+      "valueType": "text"
+    }
+  ]
+}
+
