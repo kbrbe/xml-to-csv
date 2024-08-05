@@ -2,7 +2,7 @@
   "datePatterns": ["%Y", "(%Y)", "[%Y]", "%Y-%m-%d", "%d/%m/%Y", "%Y%m%d"],
   "recordTag": "marc:record",
   "recordFilter": {
-    "expression": "./marc:datafield[@tag=\"100\"]/marc:subfield[@code=\"c\"]",
+    "expression": "./marc:datafield[@tag=\"075\"]/marc:subfield[@code=\"a\"]",
     "condition": "equals",
     "value": "p"
   },
@@ -12,21 +12,6 @@
     {
       "columnName": "name",
       "expression": "./marc:datafield[@tag=\"100\"]/marc:subfield[@code=\"a\"]",
-      "valueType": "text"
-    },
-    {
-      "columnName": "numeration",
-      "expression": "./marc:datafield[@tag=\"100\"]/marc:subfield[@code=\"b\"]",
-      "valueType": "text"
-    },
-    {
-      "columnName": "titles",
-      "expression": "./marc:datafield[@tag=\"100\"]/marc:subfield[@code=\"c\"]",
-      "valueType": "text"
-    },
-    {
-      "columnName": "dates",
-      "expression": "./marc:datafield[@tag=\"100\"]/marc:subfield[@code=\"d\"]",
       "valueType": "text"
     },
     {
@@ -53,16 +38,6 @@
     {
       "columnName": "isni",
       "expression": "./marc:datafield[@tag=\"024\"]/marc:subfield[@code=\"2\" and (text()=\"isni\" or text()=\"ISNI\")]/../marc:subfield[@code=\"a\"]",
-      "valueType": "text"
-    },
-    {
-      "columnName": "viaf",
-      "expression": "./marc:datafield[@tag=\"024\"]/marc:subfield[@code=\"2\" and (text()=\"viaf\" or text()=\"VIAF\")]/../marc:subfield[@code=\"a\"]",
-      "valueType": "text"
-    },
-    {
-      "columnName": "biographicalData",
-      "expression": "./marc:datafield[@tag=\"678\"]/marc:subfield[@code=\"a\"]",
       "valueType": "text"
     }
   ]
