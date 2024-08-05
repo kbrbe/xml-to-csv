@@ -10,6 +10,56 @@ NS_MARCSLIM = 'http://www.loc.gov/MARC21/slim'
 ALL_NS = {'marc': NS_MARCSLIM}
 
 # -----------------------------------------------------------------------------
+def updateProgressBar(pbar, config, updateFrequency):
+  """This function updates the given progress bar based on the given update frequency."""
+
+  message = "##### xml_to_csv #####"
+  if "recordFilter" in config:
+    pbar.set_description(f'{message} total: {config["counters"]["recordCounter"]}; passed filter: {config["counters"]["filteredRecordCounter"]}; could not apply filter: {config["counters"]["filteredRecordExceptionCounter"]}')
+  else:
+    pbar.set_description(f'{message} total: {recordCounter}')
+  pbar.update(updateFrequency)
+
+
+# -----------------------------------------------------------------------------
+def fast_iter(context, func, tagName, pbar, config, updateFrequency=100, *args, **kwargs):
+  """
+  Adapted from http://stackoverflow.com/questions/12160418
+
+  This function calls "func" for each parsed record with name "tagName".
+  All name parameters of this function are used to initialize and update a progress bar.
+  Other non-keyword arguments (args) and keyword arguments (kwargs) are provided to "func".
+  """
+
+  for event, elem in context:
+    if  event == 'end' and elem.tag == tagName:
+
+      # call the given function and provide it the given parameters
+      func(elem, config, *args, **kwargs)
+
+      # Update progress bar
+      config['counters']['recordCounter'] += 1
+      if config['counters']['recordCounter'] % updateFrequency == 0:
+        updateProgressBar(pbar, config, updateFrequency)
+
+      # Clean up parsed element and references to it to save RAM
+      elem.clear()
+      for ancestor in elem.xpath('ancestor-or-self::*'):
+        while ancestor.getprevious() is not None:
+          del ancestor.getparent()[0]
+
+  # We are done
+  del context
+
+  # update the remaining count after the loop has ended
+  if config["counters"]["recordCounter"] % updateFrequency != 0:
+    updateProgressBar(pbar, config, updateFrequency)
+
+  #filteredRecordCounterTotal = filteredRecordCounter + filteredRecordExceptionCounter
+  #print(f'{recordCounter} records processed, {filteredRecordCounterTotal} filtered out (from which {filteredRecordCounter} did not pass the filter and {filteredRecordExceptionCounter} where the filter could not be applied!')
+
+
+# -----------------------------------------------------------------------------
 def parseDate(date, patterns):
   """"This function returns a string representing a date based on the input and a list of possible patterns.
 

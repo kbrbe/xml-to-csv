@@ -104,7 +104,7 @@ def getRecordTagName(config):
 # -----------------------------------------------------------------------------
 def countRecords(filename, config):
   # if the XML file is huge, memory becomes an issue even while streaming because a reference to the parent is kept
-  # therefore we first get the root element
+  # therefore we first get the root element and later clean all root references to elem
   # https://stackoverflow.com/questions/12160418/why-is-lxml-etree-iterparse-eating-up-all-my-memory
   context = ET.iterparse(filename, events=('start', 'end'))
   context = iter(context)
@@ -114,14 +114,18 @@ def countRecords(filename, config):
 
   recordCounter = 0
   counterThresholdPrint = 100000
-  # now we iterate over the children of the root and always clear the root information
+  # now we iterate over the children of the root and always clear the element and references to it afterwards
   for event, elem in context:
     if  event == 'end' and elem.tag == recordTag:
       if recordCounter != 0 and recordCounter % counterThresholdPrint == 0:
         print(f'... still busy, just passed {recordCounter:,} records')
       recordCounter += 1
-      root.clear()
       elem.clear()
+      for ancestor in elem.xpath('ancestor-or-self::*'):
+        while ancestor.getprevious() is not None:
+          del ancestor.getparent()[0]
+
+
 
   print(f'{recordCounter} records found!')
   return recordCounter
@@ -138,9 +142,6 @@ def main(inputFilename, outputFilename, configFilename, prefix):
   
   recordTag = getRecordTagName(config)
   
-  #
-  # Instead of loading everything to main memory, stream over the XML using iterparse
-  #
   with open(outputFilename, 'w') as outFile:
 
 
@@ -171,74 +172,46 @@ def main(inputFilename, outputFilename, configFilename, prefix):
       #recordCounter = countRecords(inputFilename, config)
       pbar = tqdm(position=0)
 
-      # if the XML file is huge, memory becomes an issue even while streaming because a reference to the parent is kept
-      # therefore we first get the root element
-      # https://stackoverflow.com/questions/12160418/why-is-lxml-etree-iterparse-eating-up-all-my-memory
       context = ET.iterparse(inputFilename, events=('start', 'end'))
-      context = iter(context)
-      event, root = next(context)
+      #
+      # The first 6 arguments are related to the fast_iter function
+      # everything afterwards will directly be given to processRecord
+      updateFrequency=1000
+      config['counters'] = {
+        'recordCounter': 0,
+        'filteredRecordCounter': 0,
+        'filteredRecordExceptionCounter': 0
+      }
+      utils.fast_iter(context, processRecord, recordTag, pbar, config, updateFrequency, outputWriter, files, prefix)
 
-      recordCounter = 0
-      filteredRecordCounter = 0
-      filteredRecordExceptionCounter = 0
 
-      updateFrequency = 1000
-      # now we iterate over the children of the root and always clear the root information
-      for event, elem in context:
 
-        # The parser finished reading one authority record, get information and then discard the record
-        if  event == 'end' and elem.tag == recordTag:
-          if "recordFilter" in config:
-            try:
-              if not utils.passFilter(elem, config["recordFilter"]):
-                filteredRecordCounter += 1
-                if recordCounter % updateFrequency == 0:
-                  pbar.set_description(f'total: {recordCounter}; passed filter: {filteredRecordCounter}; could not apply filter: {filteredRecordExceptionCounter}')
-                  pbar.update(updateFrequency)
-                root.clear()
-                elem.clear()
-                continue
-            except Exception as e:
-                recordID = utils.getElementValue(elem.find(config['recordIDExpression'], ALL_NS))
-                #print(f'{recordID} {e}')
-                filteredRecordExceptionCounter += 1
-                if recordCounter % updateFrequency ==0:
-                  pbar.set_description(f'total: {recordCounter}; passed filter: {filteredRecordCounter}; could not apply filter: {filteredRecordExceptionCounter}')
-                  pbar.update(updateFrequency)
-                root.clear()
-                elem.clear()
-                continue
-          recordData = getValueList(elem, config, "dataFields")
-          outputWriter.writerow(recordData)
+# -----------------------------------------------------------------------------
+def processRecord(elem, config, outputWriter, files, prefix):
 
-          # Create a CSV output file for each selected column to resolve 1:n relationships
-          if prefix != "":
-            recordID = recordData[config["recordIDColumnName"]]
-            for columnName, valueList in recordData.items():
-              if valueList and columnName != config["recordIDColumnName"]:
-                for v in valueList:
-                  files[columnName].writerow({config["recordIDColumnName"]: recordID, columnName: v})
-                  
 
-          recordCounter += 1
-          if recordCounter % updateFrequency == 0:
-            if "recordFilter" in config:
-              pbar.set_description(f'total: {recordCounter}; passed filter: {filteredRecordCounter}; could not apply filter: {filteredRecordExceptionCounter}')
-            else:
-              pbar.set_description(f'total: {recordCounter}')
-            pbar.update(updateFrequency)
-          root.clear()
-          elem.clear()
+  if "recordFilter" in config:
+    try:
+      if not utils.passFilter(elem, config["recordFilter"]):
+        config['counters']['filteredRecordCounter'] += 1
+        return None
+    except Exception as e:
+        recordID = utils.getElementValue(elem.find(config['recordIDExpression'], ALL_NS))
+        #print(f'{recordID} {e}')
+        config['counters']['filteredRecordExceptionCounter'] += 1
+        return None
 
-      # update the remaining count after the loop has ended
-      if recordCounter % updateFrequency != 0:
-        if "recordFilter" in config:
-          pbar.set_description(f'total: {recordCounter}; passed filter: {filteredRecordCounter}; could not apply filter: {filteredRecordExceptionCounter}')
-        else:
-          pbar.set_description(f'total: {recordCounter}')
-        pbar.update(updateFrequency)
-      filteredRecordCounterTotal = filteredRecordCounter + filteredRecordExceptionCounter
-      print(f'{recordCounter} records processed, {filteredRecordCounterTotal} filtered out (from which {filteredRecordCounter} did not pass the filter and {filteredRecordExceptionCounter} where the filter could not be applied!')
+  recordData = getValueList(elem, config, "dataFields")
+  outputWriter.writerow(recordData)
+
+  # Create a CSV output file for each selected columns to resolve 1:n relationships
+  if prefix != "":
+    recordID = recordData[config["recordIDColumnName"]]
+    for columnName, valueList in recordData.items():
+      if valueList and columnName != config["recordIDColumnName"]:
+        for v in valueList:
+          files[columnName].writerow({config["recordIDColumnName"]: recordID, columnName: v})
+          
 
 # -----------------------------------------------------------------------------
 def parseArguments():
