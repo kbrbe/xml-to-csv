@@ -20,6 +20,54 @@ ALL_NS = {'marc': NS_MARCSLIM}
 
 
 # -----------------------------------------------------------------------------
+def main(inputFilename, outputFilename, configFilename, prefix):
+  """This script reads an XML file in MARC slim format and extracts several fields to create a CSV file."""
+
+
+  with open(configFilename, 'r') as configFile:
+    config = json.load(configFile)
+  
+  recordTag = getRecordTagName(config)
+  
+  with open(outputFilename, 'w') as outFile:
+
+
+    # Create a dictionary with file pointers
+    # Because ExitStack is used, it is as of each of the file pointers has their own "with" clause
+    # This is necessary, because the selected columns and thus possible output file pointers are variable
+    # In the code we cannot determine upfront how many "with" statements we would need
+    with ExitStack() as stack:
+      files = { columnName : csv.DictWriter(open(f'{prefix}-{columnName}.csv', 'w'), fieldnames=[config["recordIDColumnName"], columnName], delimiter=',') for columnName in [field["columnName"] for field in config["dataFields"]] }
+
+      outputFields = [config["recordIDColumnName"]] + [f["columnName"] for f in config["dataFields"]]
+      outputWriter = csv.DictWriter(outFile, fieldnames=outputFields, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+      
+      # write the CSV header for the output file
+      outputWriter.writeheader()
+
+      # write the CSV header for the per-column output files (1:n relationships)
+      if prefix != "":
+        for filename, fileHandle  in files.items():
+          fileHandle.writeheader()
+
+      pbar = tqdm(position=0)
+
+      context = ET.iterparse(inputFilename, events=('start', 'end'))
+      #
+      # The first 6 arguments are related to the fast_iter function
+      # everything afterwards will directly be given to processRecord
+      updateFrequency=1000
+      config['counters'] = {
+        'recordCounter': 0,
+        'filteredRecordCounter': 0,
+        'filteredRecordExceptionCounter': 0
+      }
+      utils.fast_iter(context, processRecord, recordTag, pbar, config, updateFrequency, outputWriter, files, prefix)
+
+
+
+
+# -----------------------------------------------------------------------------
 def getValueList(elem, config, configKey):
 
   datePatterns = config["datePatterns"]
@@ -98,53 +146,6 @@ def getRecordTagName(config):
     recordTag = recordTagString
 
   return recordTag
-
-
-# -----------------------------------------------------------------------------
-def main(inputFilename, outputFilename, configFilename, prefix):
-  """This script reads an XML file in MARC slim format and extracts several fields to create a CSV file."""
-
-
-  with open(configFilename, 'r') as configFile:
-    config = json.load(configFile)
-  
-  recordTag = getRecordTagName(config)
-  
-  with open(outputFilename, 'w') as outFile:
-
-
-    # Create a dictionary with file pointers
-    # Because ExitStack is used, it is as of each of the file pointers has their own "with" clause
-    # This is necessary, because the selected columns and thus possible output file pointers are variable
-    # In the code we cannot determine upfront how many "with" statements we would need
-    with ExitStack() as stack:
-      files = { columnName : csv.DictWriter(open(f'{prefix}-{columnName}.csv', 'w'), fieldnames=[config["recordIDColumnName"], columnName], delimiter=',') for columnName in [field["columnName"] for field in config["dataFields"]] }
-
-      outputFields = [config["recordIDColumnName"]] + [f["columnName"] for f in config["dataFields"]]
-      outputWriter = csv.DictWriter(outFile, fieldnames=outputFields, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-      
-      # write the CSV header for the output file
-      outputWriter.writeheader()
-
-      # write the CSV header for the per-column output files (1:n relationships)
-      if prefix != "":
-        for filename, fileHandle  in files.items():
-          fileHandle.writeheader()
-
-      pbar = tqdm(position=0)
-
-      context = ET.iterparse(inputFilename, events=('start', 'end'))
-      #
-      # The first 6 arguments are related to the fast_iter function
-      # everything afterwards will directly be given to processRecord
-      updateFrequency=1000
-      config['counters'] = {
-        'recordCounter': 0,
-        'filteredRecordCounter': 0,
-        'filteredRecordExceptionCounter': 0
-      }
-      utils.fast_iter(context, processRecord, recordTag, pbar, config, updateFrequency, outputWriter, files, prefix)
-
 
 
 # -----------------------------------------------------------------------------
