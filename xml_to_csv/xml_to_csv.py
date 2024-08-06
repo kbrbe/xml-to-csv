@@ -102,7 +102,9 @@ def getValueList(elem, config, configKey):
       for v in values:
 
         if 'valueType' in p:
-          if valueType = 'json':
+          valueType = p['valueType']
+          if valueType == 'json':
+            pass
           else:
             # other value types require to analyze the text content
             vText = v.text
@@ -110,7 +112,6 @@ def getValueList(elem, config, configKey):
             if vText:
               # parse different value types, for example dates or regular strings
               #
-              valueType = p['valueType']
               if valueType == 'date':
                 vNorm = utils.parseDate(vText, datePatterns)
                 recordData[columnName].append(vNorm)
