@@ -232,6 +232,7 @@ def passFilter(elem, filterConfig):
   """This function checks if the given element passes the specified filter condition.
      If the expression of the filter finds several elements, all have to pass the filter.
 
+  The filter expression equals checks for equality
   >>> filterPseudonym = {"expression":"./datafield", "condition": "equals", "value": "p"}
   >>> elem0 = ET.fromstring("<root><datafield>p</datafield></root>")
   >>> passFilter(elem0, filterPseudonym)
@@ -265,32 +266,49 @@ def passFilter(elem, filterConfig):
   >>> elem5 = ET.fromstring("<root><datafield>p</datafield><datafield>p</datafield></root>")
   >>> passFilter(elem5, filterPseudonym)
   True
+
+  The filter expression exists checks if the given element exists
+  >>> filterExist = {"expression":"./datafield", "condition": "exists"}
+  >>> elem6 = ET.fromstring("<root><datafield>p</datafield></root>")
+  >>> passFilter(elem6, filterExist)
+  True
+
+  >>> elem7 = ET.fromstring("<root><otherField>p</otherField></root>")
+  >>> passFilter(elem7, filterExist)
+  False
   """
 
   filterExpression = filterConfig["expression"]
   condition = filterConfig["condition"]
-  expectedValue = filterConfig["value"]
 
   values = elem.xpath(filterExpression, namespaces=ALL_NS)
-  if values:
-    filterPassed = []
-    foundValues = []
-    for value in values:
-      foundValues.append(value.text)
-      if condition == "equals" or condition == "equal":
-        if value.text == expectedValue:
-          filterPassed.append(True)
-        else:
-          filterPassed.append(False)
-    if all(filterPassed):
+  if condition == "exists" or condition == "exist":
+    if values:
       return True
     else:
-      if len(filterPassed) > 1:
-        raise Exception(f'Multiple elements found and not all of them passed the filter: {foundValues}, {condition} {expectedValue}')
-      else:
-        return filterPassed[0]
+      return False
   else:
-    raise Exception(f'Element with filter criteria not found, expected {filterExpression}')
+    if values:
+      filterPassed = []
+      foundValues = []
+      for value in values:
+        foundValues.append(value.text)
+        if condition == "equals" or condition == "equal":
+          expectedValue = filterConfig["value"]
+          if value.text == expectedValue:
+            filterPassed.append(True)
+          else:
+            filterPassed.append(False)
+          
+      if all(filterPassed):
+        return True
+      else:
+        if len(filterPassed) > 1:
+          raise Exception(f'Multiple elements found and not all of them passed the filter: {foundValues}, {condition} {expectedValue}')
+        else:
+          return filterPassed[0]
+    else:
+      raise Exception(f'Element with filter criteria not found, expected {filterExpression}')
 
   
 
