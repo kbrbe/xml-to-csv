@@ -90,12 +90,12 @@ def getValueList(elem, config, configKey):
   for p in config[configKey]:
     expression = p['expression']
     columnName = p['columnName']
-    values = None
 
     # extract the data by using xpath
     #
     values = elem.xpath(expression, namespaces=ALL_NS)
 
+    print(values)
     # process all extracted data (possibly more than one value)
     #
     if values:
@@ -106,11 +106,18 @@ def getValueList(elem, config, configKey):
           if valueType == 'json':
             if "subfields" in p:
               subfieldConfigEntries = ['subfields']
+              allSubfieldsData = {f["columnName"]: [] for f in subfieldConfigEntries}
               for subfieldConfig in subfieldConfigEntries:
                 subfieldColumnName = subfieldConfig['columnName']
                 subfieldExpression = subfieldConfig['expression']
                 subfieldValueType = subfieldConfig['valueType']
-                v.xpath(subfieldExpression, namespaces=ALL_NS)
+                if subfieldValueType == 'json':
+                  print(f'type "json" not allowed for subfields')
+                  continue
+                subfieldValue = v.xpath(subfieldExpression, namespaces=ALL_NS)
+                utils.extractFieldValue(subfieldValue.text, subfieldValueType, allSubfieldsData[subfieldColumnName])
+              print()
+              print(allSubfieldsData)
             else:
               print(f'JSON specified, but no subfields given')
           else:
