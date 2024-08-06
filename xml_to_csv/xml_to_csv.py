@@ -100,37 +100,43 @@ def getValueList(elem, config, configKey):
     #
     if values:
       for v in values:
-        vText = v.text
-        vNorm = None
 
-        if vText:
-          # parse different value types, for example dates or regular strings
-          #
-          if 'valueType' in p:
-            valueType = p['valueType']
-            if valueType == 'date':
-              vNorm = utils.parseDate(vText, datePatterns)
-              recordData[columnName].append(vNorm)
-            elif valueType == 'text':
-              recordData[columnName].append(vText)
-            elif valueType == 'isniURL':
-              isniComponents = vText.split('isni.org/isni/')
-              if len(isniComponents) > 1:
-                vNorm = isniComponents[1]
+        if 'valueType' in p:
+          if valueType = 'json':
+          else:
+            # other value types require to analyze the text content
+            vText = v.text
+            vNorm = None
+            if vText:
+              # parse different value types, for example dates or regular strings
+              #
+              valueType = p['valueType']
+              if valueType == 'date':
+                vNorm = utils.parseDate(vText, datePatterns)
                 recordData[columnName].append(vNorm)
+              elif valueType == 'text':
+                recordData[columnName].append(vText)
+              elif valueType == 'isniURL':
+                isniComponents = vText.split('isni.org/isni/')
+                if len(isniComponents) > 1:
+                  vNorm = isniComponents[1]
+                  recordData[columnName].append(vNorm)
+                else:
+                  print(f'Warning: malformed ISNI URL for authority {recordID}: "{vText}"')
+              elif valueType == 'bnfURL':
+                bnfComponents = vText.split('ark:/12148/')
+                if len(bnfComponents) > 1:
+                  vNorm = bnfComponents[1]
+                  recordData[columnName].append(vNorm)
+                else:
+                  print(f'Warning: malformed BnF URL for authority {recordID}: "{vText}"')
+              
               else:
-                print(f'Warning: malformed ISNI URL for authority {recordID}: "{vText}"')
-            elif valueType == 'bnfURL':
-              bnfComponents = vText.split('ark:/12148/')
-              if len(bnfComponents) > 1:
-                vNorm = bnfComponents[1]
-                recordData[columnName].append(vNorm)
-              else:
-                print(f'Warning: malformed BnF URL for authority {recordID}: "{vText}"')
+                print(f'Unknown value type "{valueType}"')
 
-            else:
-              print(f'Unknown value type "{valueType}"')
-
+        else:
+          print(f'No valueType given!')
+    
   recordData = {k:"" if not v else v for k,v in recordData.items()}
   return recordData
 
