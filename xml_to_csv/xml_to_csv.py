@@ -101,37 +101,6 @@ def getRecordTagName(config):
 
 
 # -----------------------------------------------------------------------------
-def countRecords(filename, config):
-  # if the XML file is huge, memory becomes an issue even while streaming because a reference to the parent is kept
-  # therefore we first get the root element and later clean all root references to elem
-  # https://stackoverflow.com/questions/12160418/why-is-lxml-etree-iterparse-eating-up-all-my-memory
-  context = ET.iterparse(filename, events=('start', 'end'))
-  context = iter(context)
-  event, root = next(context)
-
-  recordTag = getRecordTagName(config)
-
-  recordCounter = 0
-  counterThresholdPrint = 100000
-  # now we iterate over the children of the root and always clear the element and references to it afterwards
-  for event, elem in context:
-    if  event == 'end' and elem.tag == recordTag:
-      if recordCounter != 0 and recordCounter % counterThresholdPrint == 0:
-        print(f'... still busy, just passed {recordCounter:,} records')
-      recordCounter += 1
-      elem.clear()
-      for ancestor in elem.xpath('ancestor-or-self::*'):
-        while ancestor.getprevious() is not None:
-          del ancestor.getparent()[0]
-
-
-
-  print(f'{recordCounter} records found!')
-  return recordCounter
-
-
-
-# -----------------------------------------------------------------------------
 def main(inputFilename, outputFilename, configFilename, prefix):
   """This script reads an XML file in MARC slim format and extracts several fields to create a CSV file."""
 
@@ -162,13 +131,6 @@ def main(inputFilename, outputFilename, configFilename, prefix):
         for filename, fileHandle  in files.items():
           fileHandle.writeheader()
 
-      #
-      # Usually parsing the XML first to determine the number of records is fast
-      # However, for KBR person XML files this takes a long time
-      # Thus we separately instantiate tqdm and parse on the run
-      # unfortunately we don't see the progress then in terms of percentage
-      #print(f'Computing size such that we can show a progress bar ...')
-      #recordCounter = countRecords(inputFilename, config)
       pbar = tqdm(position=0)
 
       context = ET.iterparse(inputFilename, events=('start', 'end'))
