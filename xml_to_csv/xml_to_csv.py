@@ -104,37 +104,18 @@ def getValueList(elem, config, configKey):
         if 'valueType' in p:
           valueType = p['valueType']
           if valueType == 'json':
-            pass
+            if "subfields" in p:
+              subfieldConfigEntries = ['subfields']
+              for subfieldConfig in subfieldConfigEntries:
+                subfieldColumnName = subfieldConfig['columnName']
+                subfieldExpression = subfieldConfig['expression']
+                subfieldValueType = subfieldConfig['valueType']
+                v.xpath(subfieldExpression, namespaces=ALL_NS)
+            else:
+              print(f'JSON specified, but no subfields given')
           else:
             # other value types require to analyze the text content
-            vText = v.text
-            vNorm = None
-            if vText:
-              # parse different value types, for example dates or regular strings
-              #
-              if valueType == 'date':
-                vNorm = utils.parseDate(vText, datePatterns)
-                recordData[columnName].append(vNorm)
-              elif valueType == 'text':
-                recordData[columnName].append(vText)
-              elif valueType == 'isniURL':
-                isniComponents = vText.split('isni.org/isni/')
-                if len(isniComponents) > 1:
-                  vNorm = isniComponents[1]
-                  recordData[columnName].append(vNorm)
-                else:
-                  print(f'Warning: malformed ISNI URL for authority {recordID}: "{vText}"')
-              elif valueType == 'bnfURL':
-                bnfComponents = vText.split('ark:/12148/')
-                if len(bnfComponents) > 1:
-                  vNorm = bnfComponents[1]
-                  recordData[columnName].append(vNorm)
-                else:
-                  print(f'Warning: malformed BnF URL for authority {recordID}: "{vText}"')
-              
-              else:
-                print(f'Unknown value type "{valueType}"')
-
+            utils.extractFieldValue(v.text, valueType, recordData[columnName])
         else:
           print(f'No valueType given!')
     

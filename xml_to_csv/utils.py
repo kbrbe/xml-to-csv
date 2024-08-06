@@ -311,6 +311,37 @@ def passFilter(elem, filterConfig):
       raise Exception(f'Element with filter criteria not found, expected {filterExpression}')
 
   
+# -----------------------------------------------------------------------------
+def extractFieldValue(value, valueType, columnData):
+
+  vNorm = None
+  if value:
+    # parse different value types, for example dates or regular strings
+    #
+    if valueType == 'date':
+      vNorm = utils.parseDate(value, datePatterns)
+      columnData.append(vNorm)
+    elif valueType == 'text':
+      columnData.append(value)
+    elif valueType == 'isniURL':
+      isniComponents = value.split('isni.org/isni/')
+      if len(isniComponents) > 1:
+        vNorm = isniComponents[1]
+        columnData.append(vNorm)
+      else:
+        print(f'Warning: malformed ISNI URL for authority {recordID}: "{value}"')
+    elif valueType == 'bnfURL':
+      bnfComponents = value.split('ark:/12148/')
+      if len(bnfComponents) > 1:
+        vNorm = bnfComponents[1]
+        columnData.append(vNorm)
+      else:
+        print(f'Warning: malformed BnF URL for authority {recordID}: "{value}"')
+    
+    else:
+      print(f'Unknown value type "{valueType}"')
+
+
 
 
 # -----------------------------------------------------------------------------
