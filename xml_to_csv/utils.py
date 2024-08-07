@@ -2,6 +2,7 @@ from datetime import datetime
 import lxml.etree as ET
 import unicodedata as ud
 import enchant
+import csv
 import re
 from stdnum import isbn
 from stdnum import exceptions
@@ -311,6 +312,52 @@ def passFilter(elem, filterConfig):
       raise Exception(f'Element with filter criteria not found, expected {filterExpression}')
 
   
+# -----------------------------------------------------------------------------
+def extractFieldValue(value, valueType, columnData):
+
+  vNorm = None
+  if value:
+    # parse different value types, for example dates or regular strings
+    #
+    if valueType == 'date':
+      vNorm = utils.parseDate(value, datePatterns)
+      columnData.append(vNorm)
+    elif valueType == 'text':
+      columnData.append(value)
+    elif valueType == 'isniURL':
+      isniComponents = value.split('isni.org/isni/')
+      if len(isniComponents) > 1:
+        vNorm = isniComponents[1]
+        columnData.append(vNorm)
+      else:
+        print(f'Warning: malformed ISNI URL for authority {recordID}: "{value}"')
+    elif valueType == 'bnfURL':
+      bnfComponents = value.split('ark:/12148/')
+      if len(bnfComponents) > 1:
+        vNorm = bnfComponents[1]
+        columnData.append(vNorm)
+      else:
+        print(f'Warning: malformed BnF URL for authority {recordID}: "{value}"')
+    
+    else:
+      print(f'Unknown value type "{valueType}"')
+
+
+# -----------------------------------------------------------------------------
+def create1NOutputWriters(config, prefix):
+  """This function returns a dictionary where each key is a column name and its value is a csv.DictWriter initialized with correct fieldnames.
+     The function replaces the previous nested dictionary and list comprehension: it became to cluttered and adding subfield headings was difficult.
+  """
+  outputWriters = {}
+  for field in config["dataFields"]:
+    columnName = field["columnName"]
+    if field["valueType"] == 'json':
+      allColumnNames = [config["recordIDColumnName"]] + [subfield["columnName"] for subfield in field["subfields"]]
+    else:
+      allColumnNames = [config["recordIDColumnName"], columnName]
+    outputWriters[field["columnName"]] = csv.DictWriter(open(f'{prefix}-{columnName}.csv', 'w'), fieldnames=allColumnNames, delimiter=',') 
+
+  return outputWriters
 
 
 # -----------------------------------------------------------------------------

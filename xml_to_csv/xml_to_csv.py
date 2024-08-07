@@ -37,7 +37,7 @@ def main(inputFilename, outputFilename, configFilename, prefix):
     # This is necessary, because the selected columns and thus possible output file pointers are variable
     # In the code we cannot determine upfront how many "with" statements we would need
     with ExitStack() as stack:
-      files = { columnName : csv.DictWriter(open(f'{prefix}-{columnName}.csv', 'w'), fieldnames=[config["recordIDColumnName"], columnName], delimiter=',') for columnName in [field["columnName"] for field in config["dataFields"]] }
+      files = utils.create1NOutputWriters(config, prefix)
 
       outputFields = [config["recordIDColumnName"]] + [f["columnName"] for f in config["dataFields"]]
       outputWriter = csv.DictWriter(outFile, fieldnames=outputFields, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
@@ -90,7 +90,6 @@ def getValueList(elem, config, configKey):
   for p in config[configKey]:
     expression = p['expression']
     columnName = p['columnName']
-    values = None
 
     # extract the data by using xpath
     #
@@ -104,37 +103,39 @@ def getValueList(elem, config, configKey):
         if 'valueType' in p:
           valueType = p['valueType']
           if valueType == 'json':
-            pass
+            if "subfields" in p:
+              subfieldConfigEntries = p['subfields']
+              allSubfieldsData = {f["columnName"]: [] for f in subfieldConfigEntries}
+
+              # collect subfield data in a dictionary
+              #
+              for subfieldConfig in subfieldConfigEntries:
+                subfieldColumnName = subfieldConfig['columnName']
+                subfieldExpression = subfieldConfig['expression']
+                subfieldValueType = subfieldConfig['valueType']
+
+                # we are not doing recursive calls here
+                if subfieldValueType == 'json':
+                  print(f'type "json" not allowed for subfields')
+                  continue
+                subfieldValues = v.xpath(subfieldExpression, namespaces=ALL_NS)
+
+                # a subfield should not appear several times
+                # if it does, print a warning and concatenate output instead of using an array
+                #
+                subfieldDelimiter = ';'
+                if len(subfieldValues) > 1:
+                  print(f'Warning: multiple values for subfield {subfieldColumnName} in record {recordID} (concatenated with {subfieldDelimiter})')
+                subfieldTextValues = [s.text for s in subfieldValues]
+                allSubfieldsData[subfieldColumnName] = subfieldDelimiter.join(subfieldTextValues)
+
+              # the dictionary of subfield lists becomes the JSON value of this column
+              recordData[columnName] = allSubfieldsData
+            else:
+              print(f'JSON specified, but no subfields given')
           else:
             # other value types require to analyze the text content
-            vText = v.text
-            vNorm = None
-            if vText:
-              # parse different value types, for example dates or regular strings
-              #
-              if valueType == 'date':
-                vNorm = utils.parseDate(vText, datePatterns)
-                recordData[columnName].append(vNorm)
-              elif valueType == 'text':
-                recordData[columnName].append(vText)
-              elif valueType == 'isniURL':
-                isniComponents = vText.split('isni.org/isni/')
-                if len(isniComponents) > 1:
-                  vNorm = isniComponents[1]
-                  recordData[columnName].append(vNorm)
-                else:
-                  print(f'Warning: malformed ISNI URL for authority {recordID}: "{vText}"')
-              elif valueType == 'bnfURL':
-                bnfComponents = vText.split('ark:/12148/')
-                if len(bnfComponents) > 1:
-                  vNorm = bnfComponents[1]
-                  recordData[columnName].append(vNorm)
-                else:
-                  print(f'Warning: malformed BnF URL for authority {recordID}: "{vText}"')
-              
-              else:
-                print(f'Unknown value type "{valueType}"')
-
+            utils.extractFieldValue(v.text, valueType, recordData[columnName])
         else:
           print(f'No valueType given!')
     
@@ -158,7 +159,6 @@ def getRecordTagName(config):
 # -----------------------------------------------------------------------------
 def processRecord(elem, config, outputWriter, files, prefix):
 
-
   if "recordFilter" in config:
     try:
       if not utils.passFilter(elem, config["recordFilter"]):
@@ -166,7 +166,6 @@ def processRecord(elem, config, outputWriter, files, prefix):
         return None
     except Exception as e:
         recordID = utils.getElementValue(elem.find(config['recordIDExpression'], ALL_NS))
-        #print(f'{recordID} {e}')
         config['counters']['filteredRecordExceptionCounter'] += 1
         return None
 
@@ -178,8 +177,14 @@ def processRecord(elem, config, outputWriter, files, prefix):
     recordID = recordData[config["recordIDColumnName"]]
     for columnName, valueList in recordData.items():
       if valueList and columnName != config["recordIDColumnName"]:
-        for v in valueList:
-          files[columnName].writerow({config["recordIDColumnName"]: recordID, columnName: v})
+        if isinstance(valueList, list):
+          # simple 1:n relationship: one row per value
+          for v in valueList:
+            files[columnName].writerow({config["recordIDColumnName"]: recordID, columnName: v})
+        elif isinstance(valueList, dict):
+          # complex 1:n relationship: one row per value, but subfields require multiple columns
+          valueList.update({config["recordIDColumnName"]: recordID})
+          files[columnName].writerow(valueList)
           
 
 # -----------------------------------------------------------------------------
