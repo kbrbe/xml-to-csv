@@ -16,7 +16,7 @@ def updateProgressBar(pbar, config, updateFrequency):
 
   message = "##### xml_to_csv #####"
   if "recordFilter" in config:
-    pbar.set_description(f'{message} total: {config["counters"]["recordCounter"]}; passed filter: {config["counters"]["filteredRecordCounter"]}; could not apply filter: {config["counters"]["filteredRecordExceptionCounter"]}')
+    pbar.set_description(f'{message} files: {config["counters"]["fileCounter"]}; records total: {config["counters"]["recordCounter"]}; passed filter: {config["counters"]["filteredRecordCounter"]}; could not apply filter: {config["counters"]["filteredRecordExceptionCounter"]}')
   else:
     pbar.set_description(f'{message} total: {recordCounter}')
   pbar.update(updateFrequency)

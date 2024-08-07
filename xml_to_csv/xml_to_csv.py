@@ -20,8 +20,8 @@ ALL_NS = {'marc': NS_MARCSLIM}
 
 
 # -----------------------------------------------------------------------------
-def main(inputFilename, outputFilename, configFilename, prefix):
-  """This script reads an XML file in MARC slim format and extracts several fields to create a CSV file."""
+def main(inputFilenames, outputFilename, configFilename, prefix):
+  """This script reads XML files in and extracts several fields to create CSV files."""
 
 
   with open(configFilename, 'r') as configFile:
@@ -51,18 +51,22 @@ def main(inputFilename, outputFilename, configFilename, prefix):
           fileHandle.writeheader()
 
       pbar = tqdm(position=0)
-
-      context = ET.iterparse(inputFilename, events=('start', 'end'))
-      #
-      # The first 6 arguments are related to the fast_iter function
-      # everything afterwards will directly be given to processRecord
       updateFrequency=1000
       config['counters'] = {
         'recordCounter': 0,
+        'fileCounter': 0,
         'filteredRecordCounter': 0,
         'filteredRecordExceptionCounter': 0
       }
-      utils.fast_iter(context, processRecord, recordTag, pbar, config, updateFrequency, outputWriter, files, prefix)
+
+      for inputFilename in inputFilenames:
+        if inputFilename.endswith('.xml'):
+          context = ET.iterparse(inputFilename, events=('start', 'end'))
+          #
+          # The first 6 arguments are related to the fast_iter function
+          # everything afterwards will directly be given to processRecord
+          utils.fast_iter(context, processRecord, recordTag, pbar, config, updateFrequency, outputWriter, files, prefix)
+          config['counters']['fileCounter'] += 1
 
 
 
@@ -191,7 +195,7 @@ def processRecord(elem, config, outputWriter, files, prefix):
 def parseArguments():
 
   parser = ArgumentParser(description='This script reads an XML file in MARC slim format and extracts several fields to create a CSV file.')
-  parser.add_argument('-i', '--input-file', action='store', required=True, help='The input file containing MARC SLIM XML records')
+  parser.add_argument('inputFiles', nargs='+', help='The input files containing XML records')
   parser.add_argument('-c', '--config-file', action='store', required=True, help='The config file with XPath expressions to extract')
   parser.add_argument('-p', '--prefix', action='store', required=False, default='', help='If given, one file per column with this prefix will be generated to resolve 1:n relationships')
   parser.add_argument('-o', '--output-file', action='store', required=True, help='The output CSV file containing extracted fields based on the provided config')
@@ -202,4 +206,4 @@ def parseArguments():
 
 if __name__ == '__main__':
   args = parseArguments()
-  main(args.input_file, args.output_file, args.config_file, args.prefix)
+  main(args.inputFiles, args.output_file, args.config_file, args.prefix)
