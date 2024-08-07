@@ -2,6 +2,7 @@ from datetime import datetime
 import lxml.etree as ET
 import unicodedata as ud
 import enchant
+import csv
 import re
 from stdnum import isbn
 from stdnum import exceptions
@@ -342,6 +343,21 @@ def extractFieldValue(value, valueType, columnData):
       print(f'Unknown value type "{valueType}"')
 
 
+# -----------------------------------------------------------------------------
+def create1NOutputWriters(config, prefix):
+  """This function returns a dictionary where each key is a column name and its value is a csv.DictWriter initialized with correct fieldnames.
+     The function replaces the previous nested dictionary and list comprehension: it became to cluttered and adding subfield headings was difficult.
+  """
+  outputWriters = {}
+  for field in config["dataFields"]:
+    columnName = field["columnName"]
+    if field["valueType"] == 'json':
+      allColumnNames = [config["recordIDColumnName"]] + [subfield["columnName"] for subfield in field["subfields"]]
+    else:
+      allColumnNames = [config["recordIDColumnName"], columnName]
+    outputWriters[field["columnName"]] = csv.DictWriter(open(f'{prefix}-{columnName}.csv', 'w'), fieldnames=allColumnNames, delimiter=',') 
+
+  return outputWriters
 
 
 # -----------------------------------------------------------------------------

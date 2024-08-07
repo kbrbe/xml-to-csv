@@ -37,7 +37,7 @@ def main(inputFilename, outputFilename, configFilename, prefix):
     # This is necessary, because the selected columns and thus possible output file pointers are variable
     # In the code we cannot determine upfront how many "with" statements we would need
     with ExitStack() as stack:
-      files = { columnName : csv.DictWriter(open(f'{prefix}-{columnName}.csv', 'w'), fieldnames=[config["recordIDColumnName"], columnName], delimiter=',') for columnName in [field["columnName"] for field in config["dataFields"]] }
+      files = utils.create1NOutputWriters(config, prefix)
 
       outputFields = [config["recordIDColumnName"]] + [f["columnName"] for f in config["dataFields"]]
       outputWriter = csv.DictWriter(outFile, fieldnames=outputFields, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
@@ -120,10 +120,14 @@ def getValueList(elem, config, configKey):
                   continue
                 subfieldValues = v.xpath(subfieldExpression, namespaces=ALL_NS)
 
-                # also a subfield might appear several times, use an array
+                # a subfield should not appear several times
+                # if it does, print a warning and concatenate output instead of using an array
                 #
-                for subfieldValue in subfieldValues:
-                  utils.extractFieldValue(subfieldValue.text, subfieldValueType, allSubfieldsData[subfieldColumnName])
+                subfieldDelimiter = ';'
+                if len(subfieldValues) > 1:
+                  print(f'Warning: multiple values for subfield {subfieldColumnName} in record {recordID} (concatenated with {subfieldDelimiter})')
+                subfieldTextValues = [s.text for s in subfieldValues]
+                allSubfieldsData[subfieldColumnName] = subfieldDelimiter.join(subfieldTextValues)
 
               # the dictionary of subfield lists becomes the JSON value of this column
               recordData[columnName] = allSubfieldsData
@@ -162,7 +166,6 @@ def processRecord(elem, config, outputWriter, files, prefix):
         return None
     except Exception as e:
         recordID = utils.getElementValue(elem.find(config['recordIDExpression'], ALL_NS))
-        #print(f'{recordID} {e}')
         config['counters']['filteredRecordExceptionCounter'] += 1
         return None
 
@@ -174,8 +177,14 @@ def processRecord(elem, config, outputWriter, files, prefix):
     recordID = recordData[config["recordIDColumnName"]]
     for columnName, valueList in recordData.items():
       if valueList and columnName != config["recordIDColumnName"]:
-        for v in valueList:
-          files[columnName].writerow({config["recordIDColumnName"]: recordID, columnName: v})
+        if isinstance(valueList, list):
+          # simple 1:n relationship: one row per value
+          for v in valueList:
+            files[columnName].writerow({config["recordIDColumnName"]: recordID, columnName: v})
+        elif isinstance(valueList, dict):
+          # complex 1:n relationship: one row per value, but subfields require multiple columns
+          valueList.update({config["recordIDColumnName"]: recordID})
+          files[columnName].writerow(valueList)
           
 
 # -----------------------------------------------------------------------------
