@@ -28,6 +28,8 @@ def main(inputFilenames, outputFilename, configFilename, prefix):
     config = json.load(configFile)
   
   recordTag = getRecordTagName(config)
+
+  outputFolder = os.path.dirname(outputFilename)
   
   with open(outputFilename, 'w') as outFile:
 
@@ -37,7 +39,7 @@ def main(inputFilenames, outputFilename, configFilename, prefix):
     # This is necessary, because the selected columns and thus possible output file pointers are variable
     # In the code we cannot determine upfront how many "with" statements we would need
     with ExitStack() as stack:
-      files = utils.create1NOutputWriters(config, prefix)
+      files = utils.create1NOutputWriters(config, outputFolder, prefix)
 
       outputFields = [config["recordIDColumnName"]] + [f["columnName"] for f in config["dataFields"]]
       outputWriter = csv.DictWriter(outFile, fieldnames=outputFields, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)

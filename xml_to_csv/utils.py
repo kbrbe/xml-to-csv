@@ -3,6 +3,7 @@ import lxml.etree as ET
 import unicodedata as ud
 import enchant
 import csv
+import os
 import re
 from stdnum import isbn
 from stdnum import exceptions
@@ -16,7 +17,8 @@ def updateProgressBar(pbar, config, updateFrequency):
 
   message = "##### xml_to_csv #####"
   if "recordFilter" in config:
-    pbar.set_description(f'{message} files: {config["counters"]["fileCounter"]}; records total: {config["counters"]["recordCounter"]}; passed filter: {config["counters"]["filteredRecordCounter"]}; could not apply filter: {config["counters"]["filteredRecordExceptionCounter"]}')
+    passedFilter = config['counters']['recordCounter'] - config['counters']['filteredRecordCounter']
+    pbar.set_description(f'{message} files: {config["counters"]["fileCounter"]}; records total: {config["counters"]["recordCounter"]}; passed filter: {passedFilter}; not passed filter: {config["counters"]["filteredRecordCounter"]}; could not apply filter: {config["counters"]["filteredRecordExceptionCounter"]}')
   else:
     pbar.set_description(f'{message} total: {recordCounter}')
   pbar.update(updateFrequency)
@@ -344,7 +346,7 @@ def extractFieldValue(value, valueType, columnData):
 
 
 # -----------------------------------------------------------------------------
-def create1NOutputWriters(config, prefix):
+def create1NOutputWriters(config, outputFolder, prefix):
   """This function returns a dictionary where each key is a column name and its value is a csv.DictWriter initialized with correct fieldnames.
      The function replaces the previous nested dictionary and list comprehension: it became to cluttered and adding subfield headings was difficult.
   """
@@ -355,7 +357,8 @@ def create1NOutputWriters(config, prefix):
       allColumnNames = [config["recordIDColumnName"]] + [subfield["columnName"] for subfield in field["subfields"]]
     else:
       allColumnNames = [config["recordIDColumnName"], columnName]
-    outputWriters[field["columnName"]] = csv.DictWriter(open(f'{prefix}-{columnName}.csv', 'w'), fieldnames=allColumnNames, delimiter=',') 
+    outputFilename = os.path.join(outputFolder, f'{prefix}-{columnName}.csv')
+    outputWriters[field["columnName"]] = csv.DictWriter(open(outputFilename, 'w'), fieldnames=allColumnNames, delimiter=',') 
 
   return outputWriters
 
