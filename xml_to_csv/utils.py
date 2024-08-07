@@ -283,10 +283,6 @@ def passFilter(elem, filterConfig):
 
   values = elem.xpath(filterExpression, namespaces=ALL_NS)
   if condition == "exists" or condition == "exist":
-    print(f'condition exists')
-    print(filterExpression)
-    print(values)
-    print(ET.tostring(elem))
     if values:
       return True
     else:

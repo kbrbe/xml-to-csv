@@ -95,7 +95,6 @@ def getValueList(elem, config, configKey):
     #
     values = elem.xpath(expression, namespaces=ALL_NS)
 
-    print(values)
     # process all extracted data (possibly more than one value)
     #
     if values:
@@ -105,19 +104,29 @@ def getValueList(elem, config, configKey):
           valueType = p['valueType']
           if valueType == 'json':
             if "subfields" in p:
-              subfieldConfigEntries = ['subfields']
+              subfieldConfigEntries = p['subfields']
               allSubfieldsData = {f["columnName"]: [] for f in subfieldConfigEntries}
+
+              # collect subfield data in a dictionary
+              #
               for subfieldConfig in subfieldConfigEntries:
                 subfieldColumnName = subfieldConfig['columnName']
                 subfieldExpression = subfieldConfig['expression']
                 subfieldValueType = subfieldConfig['valueType']
+
+                # we are not doing recursive calls here
                 if subfieldValueType == 'json':
                   print(f'type "json" not allowed for subfields')
                   continue
-                subfieldValue = v.xpath(subfieldExpression, namespaces=ALL_NS)
-                utils.extractFieldValue(subfieldValue.text, subfieldValueType, allSubfieldsData[subfieldColumnName])
-              print()
-              print(allSubfieldsData)
+                subfieldValues = v.xpath(subfieldExpression, namespaces=ALL_NS)
+
+                # also a subfield might appear several times, use an array
+                #
+                for subfieldValue in subfieldValues:
+                  utils.extractFieldValue(subfieldValue.text, subfieldValueType, allSubfieldsData[subfieldColumnName])
+
+              # the dictionary of subfield lists becomes the JSON value of this column
+              recordData[columnName] = allSubfieldsData
             else:
               print(f'JSON specified, but no subfields given')
           else:
@@ -145,7 +154,6 @@ def getRecordTagName(config):
 
 # -----------------------------------------------------------------------------
 def processRecord(elem, config, outputWriter, files, prefix):
-
 
   if "recordFilter" in config:
     try:
