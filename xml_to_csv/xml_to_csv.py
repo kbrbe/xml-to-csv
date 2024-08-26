@@ -53,7 +53,8 @@ def main(inputFilenames, outputFilename, configFilename, prefix):
           fileHandle.writeheader()
 
       pbar = tqdm(position=0)
-      updateFrequency=1000
+      updateFrequency=10000
+      batchSize=15000
       config['counters'] = {
         'recordCounter': 0,
         'fileCounter': 0,
@@ -63,12 +64,13 @@ def main(inputFilenames, outputFilename, configFilename, prefix):
 
       for inputFilename in inputFilenames:
         if inputFilename.endswith('.xml'):
-          context = ET.iterparse(inputFilename, events=('start', 'end'))
+          config['counters']['fileCounter'] += 1
+          # only listening to "end" events (the default) and only for the tag we are interested in
+          context = ET.iterparse(inputFilename, tag=recordTag)
           #
           # The first 6 arguments are related to the fast_iter function
           # everything afterwards will directly be given to processRecord
-          utils.fast_iter(context, processRecord, recordTag, pbar, config, updateFrequency, outputWriter, files, prefix)
-          config['counters']['fileCounter'] += 1
+          utils.fast_iter(context, processRecord, recordTag, pbar, config, updateFrequency, batchSize, outputWriter, files, prefix)
 
 
 

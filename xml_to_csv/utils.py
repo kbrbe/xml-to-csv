@@ -1,4 +1,5 @@
 from datetime import datetime
+import gc
 import lxml.etree as ET
 import unicodedata as ud
 import enchant
@@ -20,12 +21,12 @@ def updateProgressBar(pbar, config, updateFrequency):
     passedFilter = config['counters']['recordCounter'] - config['counters']['filteredRecordCounter']
     pbar.set_description(f'{message} files: {config["counters"]["fileCounter"]}; records total: {config["counters"]["recordCounter"]}; passed filter: {passedFilter}; not passed filter: {config["counters"]["filteredRecordCounter"]}; could not apply filter: {config["counters"]["filteredRecordExceptionCounter"]}')
   else:
-    pbar.set_description(f'{message} total: {recordCounter}')
+    pbar.set_description(f'{message} files: {config["counters"]["fileCounter"]}; records total: {config["counters"]["recordCounter"]}')
   pbar.update(updateFrequency)
 
 
 # -----------------------------------------------------------------------------
-def fast_iter(context, func, tagName, pbar, config, updateFrequency=100, *args, **kwargs):
+def fast_iter(context, func, tagName, pbar, config, updateFrequency=100, batchSize=100, *args, **kwargs):
   """
   Adapted from http://stackoverflow.com/questions/12160418
 
@@ -34,32 +35,54 @@ def fast_iter(context, func, tagName, pbar, config, updateFrequency=100, *args, 
   Other non-keyword arguments (args) and keyword arguments (kwargs) are provided to "func".
   """
 
+  gc.disable()
+
+  batch = []
+
+  # We assume that context is configured to only fire 'end' events for tagName
+  #
   for event, elem in context:
-    if  event == 'end' and elem.tag == tagName:
+    batch.append(elem)
 
-      # call the given function and provide it the given parameters
-      func(elem, config, *args, **kwargs)
+    # process data in batches to decrease overhead
+    #
+    if len(batch) >= batchSize:
+      for record in batch:
+        # call the given function and provide it the given parameters
+        func(record, config, *args, **kwargs)
 
-      # Update progress bar
-      config['counters']['recordCounter'] += 1
+        # Update progress bar
+        config['counters']['recordCounter'] += 1
+
+        # clear to save RAM
+        record.clear()
+        # delete preceding siblings to save memory (https://lxml.de/3.2/parsing.html)
+        while record.getprevious() is not None:
+          del record.getparent()[0]
+
+      batch.clear()
       if config['counters']['recordCounter'] % updateFrequency == 0:
+        gc.collect()
         updateProgressBar(pbar, config, updateFrequency)
 
-      # Clean up parsed element and references to it to save RAM
-      elem.clear()
-      for ancestor in elem.xpath('ancestor-or-self::*'):
-        while ancestor.getprevious() is not None:
-          del ancestor.getparent()[0]
+
+  # Deal with the rest after we have finished parsing the input
+  if batch:
+    for record in batch:
+        func(record, config, *args, **kwargs)
+        config['counters']['recordCounter'] += 1
+        record.clear()
+        while record.getprevious() is not None:
+            del record.getparent()[0]
+    batch.clear()
+
+  # update the remaining count after the loop has ended
+  updateProgressBar(pbar, config, updateFrequency)
+
+  gc.enable()
 
   # We are done
   del context
-
-  # update the remaining count after the loop has ended
-  if config["counters"]["recordCounter"] % updateFrequency != 0:
-    updateProgressBar(pbar, config, updateFrequency)
-
-  #filteredRecordCounterTotal = filteredRecordCounter + filteredRecordExceptionCounter
-  #print(f'{recordCounter} records processed, {filteredRecordCounterTotal} filtered out (from which {filteredRecordCounter} did not pass the filter and {filteredRecordExceptionCounter} where the filter could not be applied!')
 
 
 # -----------------------------------------------------------------------------
