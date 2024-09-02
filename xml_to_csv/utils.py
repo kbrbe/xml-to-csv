@@ -2,6 +2,7 @@ from datetime import datetime
 import gc
 import lxml.etree as ET
 import unicodedata as ud
+from io import BytesIO
 import enchant
 import csv
 import os
@@ -23,6 +24,73 @@ def updateProgressBar(pbar, config, updateFrequency):
   else:
     pbar.set_description(f'{message} files: {config["counters"]["fileCounter"]}; records total: {config["counters"]["recordCounter"]}')
   pbar.update(updateFrequency)
+
+def create_batches(positions, batch_size):
+    """Splits the list of position tuples into batches."""
+    for i in range(0, len(positions), batch_size):
+        yield positions[i:i + batch_size]
+
+def read_chunk(filename, start, end):
+    """Reads a chunk of the file from start to end positions."""
+    with open(filename, 'rb') as file:
+        file.seek(start)
+        return file.read(end - start)
+
+# -----------------------------------------------------------------------------
+def fast_iter_batch(inputFilename, positions, func, tagName, pbar, config, updateFrequency=100, batchSize=100, *args, **kwargs):
+  """
+  Adapted from http://stackoverflow.com/questions/12160418
+
+  This function calls "func" for each parsed record with name "tagName".
+  All name parameters of this function are used to initialize and update a progress bar.
+  Other non-keyword arguments (args) and keyword arguments (kwargs) are provided to "func".
+  """
+
+  gc.disable()
+
+  for batch in create_batches(positions, batchSize):
+    start = batch[0][0]  # Start of the first tuple in the batch
+    end = batch[-1][1]   # End of the last tuple in the batch
+
+    # Read the chunk of the file corresponding to the batch
+    chunk_data = read_chunk(inputFilename, start, end)
+ 
+    print(f'tagName: {tagName}')
+    context = ET.iterparse(BytesIO(b'<collection>' + chunk_data + b'</collection>'), tag=tagName)
+    print(f'context: {context}')
+
+    try:
+      # We assume that context is configured to only fire 'end' events for tagName
+      #
+      for event, record in context:
+        # call the given function and provide it the given parameters
+        func(record, config, *args, **kwargs)
+
+        # Update progress bar
+        config['counters']['recordCounter'] += 1
+
+        # clear to save RAM
+        record.clear()
+        # delete preceding siblings to save memory (https://lxml.de/3.2/parsing.html)
+        while record.getprevious() is not None:
+          del record.getparent()[0]
+
+        if config['counters']['recordCounter'] % updateFrequency == 0:
+          gc.collect()
+          updateProgressBar(pbar, config, updateFrequency)
+    except Exception as e:
+      print(f'error for tuple ({start},{end})')
+      #print(chunk_data)
+      sys.exit(0)
+
+
+  # update the remaining count after the loop has ended
+  updateProgressBar(pbar, config, updateFrequency)
+
+  gc.enable()
+
+  # We are done
+  del context
 
 
 # -----------------------------------------------------------------------------
@@ -384,6 +452,78 @@ def create1NOutputWriters(config, outputFolder, prefix):
     outputWriters[field["columnName"]] = csv.DictWriter(open(outputFilename, 'w'), fieldnames=allColumnNames, delimiter=',') 
 
   return outputWriters
+
+# -----------------------------------------------------------------------------
+def find_record_positions(filename, tagName, chunk_size=1024*1024):
+    """
+    Find the start and end positions of records in a large XML file.
+
+    Parameters:
+    - filename: The path to the large XML file.
+    - tagName: The tag of the records to locate.
+    - chunk_size: The size of each chunk to read from the file.
+
+    Returns:
+    - A list of tuples where each tuple contains the start and end byte positions of a record.
+    """
+    record_start_pattern = re.compile(fr'<{tagName}.*?>'.encode('utf-8'))
+    record_end_pattern = re.compile(fr'</{tagName}>'.encode('utf-8'))
+    
+    positions = []
+    current_position = 0
+    buffer = b''
+    pending_start = None
+    started_pending = False
+    last_position = (-1, -1)
+    
+    with open(filename, 'rb') as file:
+
+        while True:
+            chunk = file.read(chunk_size)
+            if not chunk:
+                break
+
+            # Keep last buffer tail and track absolute positions
+            buffer += chunk
+
+            # Handle the case where records might be split across chunks
+            if pending_start is not None:
+                # Search for the end tag in the combined buffer
+                end_match = record_end_pattern.search(buffer)
+                if end_match:
+                    end_pos = end_match.end() + current_position - len(buffer) + len(chunk)
+                    if (pending_start, end_pos) != last_position:
+                      positions.append((pending_start, end_pos))
+                      last_position = (pending_start, end_pos)
+                    pending_start = None
+
+            # Search for start and end positions in the current buffer
+            for match_start in record_start_pattern.finditer(buffer):
+                if pending_start is None:
+                    # If no pending start, mark the start position
+                    pending_start = match_start.start() + current_position - len(buffer) + len(chunk)
+                
+                # Look for the corresponding end tag after the start tag
+                end_pos_search_start = match_start.end()
+                end_match = record_end_pattern.search(buffer, end_pos_search_start)
+                if end_match:
+                    # If an end tag is found, calculate the absolute position and store
+                    end_pos = end_match.end() + current_position - len(buffer) + len(chunk)
+                    if (pending_start, end_pos) != last_position:
+                      positions.append((pending_start, end_pos))
+                      last_position = (pending_start, end_pos)
+                    pending_start = None
+
+            # Update the current position to reflect the amount of the file read so far
+            current_position += len(chunk)
+            
+            # Retain the last part of the buffer (to handle cases where tags span chunks)
+            buffer_overlap = len(record_end_pattern.pattern)
+            buffer = buffer[-buffer_overlap:]
+
+    print(f'{chunk_size}: {positions}')
+    return positions
+
 
 
 # -----------------------------------------------------------------------------

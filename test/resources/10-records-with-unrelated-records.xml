@@ -1,0 +1,18 @@
+<collection>
+  <record><id>1</id><name>record 1</name></record>
+  <record><id>2</id><name>record 2</name></record>
+  <record><id>3</id><name>record 3</name></record>
+  <otherElement><id>A</id><name>Element A</name></otherElement>
+  <otherElement><id>B</id><name>Element B</name></otherElement>
+  <otherElement><id>C</id><name>Element C</name></otherElement>
+  <otherElement><id>D</id><name>Element D</name></otherElement>
+  <record><id>4</id><name>record 4</name></record>
+  <record><id>5</id><name>record 5</name></record>
+  <record><id>6</id><name>record 6</name></record>
+  <record><id>7</id><name>record 7</name></record>
+  <record><id>8</id><name>record 8</name></record>
+  <otherElement><id>E</id><name>Element E</name></otherElement>
+  <record><id>9</id><name>record 9</name></record>
+  <record><id>10</id><name>record 10</name></record>
+  <otherElement><id>F</id><name>Element F</name></otherElement>
+</collection>
