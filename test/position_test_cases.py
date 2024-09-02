@@ -1,48 +1,47 @@
 import unittest
 
-FIRST_THREE_START_POSITIONS=[15,66,117]
-LAST_THREE_START_POSITIONS = [372,423,474]
+firstThreeStartPositions=[15,66,117]
+lastThreeStartPositions = [372,423,474]
 
 class PositionTestCases():
 
   # ---------------------------------------------------------------------------
   def testCorrectNumberOfStartPositionsOnlyRecords110(self):
-    positions = self.getPositionsChunk110()
+    (positions, numberRecords, firstThreeStartPositions, lastThreeStartPositions) = self.getPositionsChunk110()
     numberFound = len(positions)
     numberExpected = 10
     self.assertEqual(numberFound, numberExpected, msg=f'Found {numberFound} instead of {numberExpected}')
 
   # ---------------------------------------------------------------------------
   def testCorrectNumberOfStartPositionsMixedCollection110(self):
-    positions = self.getPositionsChunk110()
+    (positions, numberRecords, firstThreeStartPositions, lastThreeStartPositions) = self.getPositionsChunk110()
     numberFound = len(positions)
-    numberExpected = 10
-    self.assertEqual(numberFound, numberExpected, msg=f'Found {numberFound} instead of {numberExpected}')
+    self.assertEqual(numberFound, numberRecords, msg=f'Found {numberFound} instead of {numberRecords}')
 
 
   # ---------------------------------------------------------------------------
   def testCorrectFirstThreeStartPositions(self):
-    positions = self.getPositionsChunk110()
+    (positions, numberRecords, firstThreeStartPositions, lastThreeStartPositions) = self.getPositionsChunk110()
     positionsFound = [positions[0][0], positions[1][0], positions[2][0]]
-    self.assertEqual(positionsFound, FIRST_THREE_START_POSITIONS, msg=f'Found start positions {positionsFound} instead of {FIRST_THREE_START_POSITIONS}')
+    self.assertEqual(positionsFound, firstThreeStartPositions, msg=f'Found start positions {positionsFound} instead of {firstThreeStartPositions}')
 
   # ---------------------------------------------------------------------------
   def testCorrectFirstThreeStartPositionsWithStartCut(self):
-    positions = self.getPositionsChunk110()
+    (positions, numberRecords, firstThreeStartPositions, lastThreeStartPositions) = self.getPositionsChunk110()
     positionsFound = [positions[0][0], positions[1][0], positions[2][0]]
-    self.assertEqual(positionsFound, FIRST_THREE_START_POSITIONS, msg=f'Found start positions {positionsFound} instead of {FIRST_THREE_START_POSITIONS}')
+    self.assertEqual(positionsFound, firstThreeStartPositions, msg=f'Found start positions {positionsFound} instead of {firstThreeStartPositions}')
 
   # ---------------------------------------------------------------------------
   def testCorrectFirstThreeStartPositionsWithEndCut(self):
-    positions = self.getPositionsChunk110()
+    (positions, numberRecords, firstThreeStartPositions, lastThreeStartPositions) = self.getPositionsChunk110()
     positionsFound = [positions[0][0], positions[1][0], positions[2][0]]
-    self.assertEqual(positionsFound, FIRST_THREE_START_POSITIONS, msg=f'Found start positions {positionsFound} instead of {FIRST_THREE_START_POSITIONS}')
+    self.assertEqual(positionsFound, firstThreeStartPositions, msg=f'Found start positions {positionsFound} instead of {firstThreeStartPositions}')
 
   # ---------------------------------------------------------------------------
   def testCorrectFirstThreeStartPositionsInOnego(self):
-    positions = self.getPositionsChunk1500()
+    (positions, numberRecords, firstThreeStartPositions, lastThreeStartPositions) = self.getPositionsChunk1500()
     positionsFound = [positions[0][0], positions[1][0], positions[2][0]]
-    self.assertEqual(positionsFound, FIRST_THREE_START_POSITIONS, msg=f'Found start positions {positionsFound} instead of {FIRST_THREE_START_POSITIONS}')
+    self.assertEqual(positionsFound, firstThreeStartPositions, msg=f'Found start positions {positionsFound} instead of {firstThreeStartPositions}')
 
 
 
@@ -50,27 +49,26 @@ class PositionTestCases():
 
   # ---------------------------------------------------------------------------
   def testCorrectLastThreeStartPositions(self):
-    positions = self.getPositionsChunk110()
+    (positions, numberRecords, firstThreeStartPositions, lastThreeStartPositions) = self.getPositionsChunk110()
     positionsFound = [positions[-3][0], positions[-2][0], positions[-1][0]]
-    self.assertEqual(positionsFound, LAST_THREE_START_POSITIONS, msg=f'Found start positions {positionsFound} instead of {LAST_THREE_START_POSITIONS}')
+    self.assertEqual(positionsFound, lastThreeStartPositions, msg=f'Found start positions {positionsFound} instead of {lastThreeStartPositions}')
 
   # ---------------------------------------------------------------------------
   def testCorrectLastThreeStartPositionsWithStartCut(self):
-    positions = self.getPositionsChunk110()
+    (positions, numberRecords, firstThreeStartPositions, lastThreeStartPositions) = self.getPositionsChunk110()
     positionsFound = [positions[-3][0], positions[-2][0], positions[-1][0]]
-    self.assertEqual(positionsFound, LAST_THREE_START_POSITIONS, msg=f'Found start positions {positionsFound} instead of {LAST_THREE_START_POSITIONS}')
+    self.assertEqual(positionsFound, lastThreeStartPositions, msg=f'Found start positions {positionsFound} instead of {lastThreeStartPositions}')
 
   # ---------------------------------------------------------------------------
   def testCorrectLastThreeStartPositionsWithEndCut(self):
-    positions = self.getPositionsChunk110()
-    print(positions)
+    (positions, numberRecords, firstThreeStartPositions, lastThreeStartPositions) = self.getPositionsChunk110()
     positionsFound = [positions[-3][0], positions[-2][0], positions[-1][0]]
-    self.assertEqual(positionsFound, LAST_THREE_START_POSITIONS, msg=f'Found start positions {positionsFound} instead of {LAST_THREE_START_POSITIONS}')
+    self.assertEqual(positionsFound, lastThreeStartPositions, msg=f'Found start positions {positionsFound} instead of {lastThreeStartPositions}')
 
   # ---------------------------------------------------------------------------
   def testCorrectLastThreeStartPositionsInOneGo(self):
-    positions = self.getPositionsChunk1500()
+    (positions, numberRecords, firstThreeStartPositions, lastThreeStartPositions) = self.getPositionsChunk1500()
     positionsFound = [positions[-3][0], positions[-2][0], positions[-1][0]]
-    self.assertEqual(positionsFound, LAST_THREE_START_POSITIONS, msg=f'Found start positions {positionsFound} instead of {LAST_THREE_START_POSITIONS}')
+    self.assertEqual(positionsFound, lastThreeStartPositions, msg=f'Found start positions {positionsFound} instead of {lastThreeStartPositions}')
 
 

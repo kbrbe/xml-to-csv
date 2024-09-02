@@ -1,8 +1,8 @@
 <collection>
   <record><id>1</id><name>record 1</name></record>
   <record><id>2</id><name>record 2</name></record>
-  <record><id>3</id><name>record 3</name></record>
   <otherElement><id>A</id><name>Element A</name></otherElement>
+  <record><id>3</id><name>record 3</name></record>
   <otherElement><id>B</id><name>Element B</name></otherElement>
   <otherElement><id>C</id><name>Element C</name></otherElement>
   <otherElement><id>D</id><name>Element D</name></otherElement>

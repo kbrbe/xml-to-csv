@@ -521,7 +521,6 @@ def find_record_positions(filename, tagName, chunk_size=1024*1024):
             buffer_overlap = len(record_end_pattern.pattern)
             buffer = buffer[-buffer_overlap:]
 
-    print(f'{chunk_size}: {positions}')
     return positions
 
 
