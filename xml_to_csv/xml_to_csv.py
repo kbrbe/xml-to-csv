@@ -30,7 +30,10 @@ def main(inputFilenames, outputFilename, configFilename, prefix):
   with open(configFilename, 'r') as configFile:
     config = json.load(configFile)
   
+  # used for namespace-agnostic extraction of XML-parsed records
   recordTag = getRecordTagName(config)
+
+  # used for initial string-based identification of start/end position of records
   recordTagString = config['recordTagString']
 
   outputFolder = os.path.dirname(outputFilename)
@@ -57,8 +60,10 @@ def main(inputFilenames, outputFilename, configFilename, prefix):
           fileHandle.writeheader()
 
       pbar = tqdm(position=0)
+
       updateFrequency=10000
       batchSize=40000
+
       config['counters'] = {
         'batchCounter': 0,
         'recordCounter': 0,
@@ -71,22 +76,9 @@ def main(inputFilenames, outputFilename, configFilename, prefix):
         if inputFilename.endswith('.xml'):
           config['counters']['fileCounter'] += 1
 
-          print(type(recordTag))
-          recordNamespace = recordTag.namespace
-          recordName = recordTag.localname
-
-          recordPrefixTag = None
-          if recordNamespace in ALL_NS.values():
-            prefix = list(ALL_NS)[list(ALL_NS.values()).index(recordNamespace)]
-            recordPrefixTag = f'{prefix}:{recordName}'
-
           # use record tag string, because for finding the positions there is no explicit namespace
           # later for record parsing we should use the namespace-agnostic name
-          print(f'recordPrefixTag: {recordPrefixTag}')
           positions = utils.find_record_positions(inputFilename, recordTagString, chunkSize=1024*1024)
-
-          #print(f'len of positions = {len(positions)}')
-          print(positions[0:20])
 
           # The first 6 arguments are related to the fast_iter function
           # everything afterwards will directly be given to processRecord
