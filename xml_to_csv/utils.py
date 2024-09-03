@@ -1,4 +1,5 @@
 from datetime import datetime
+import time
 import gc
 import lxml.etree as ET
 import unicodedata as ud
@@ -20,16 +21,20 @@ def updateProgressBar(pbar, config, updateFrequency):
   message = "##### xml_to_csv #####"
   if "recordFilter" in config:
     passedFilter = config['counters']['recordCounter'] - config['counters']['filteredRecordCounter']
-    pbar.set_description(f'{message} files: {config["counters"]["fileCounter"]}; records total: {config["counters"]["recordCounter"]}; passed filter: {passedFilter}; not passed filter: {config["counters"]["filteredRecordCounter"]}; could not apply filter: {config["counters"]["filteredRecordExceptionCounter"]}')
+    pbar.set_description(f'{message} files: {config["counters"]["fileCounter"]}; batches: {config["counters"]["batchCounter"]}; records total: {config["counters"]["recordCounter"]}; passed filter: {passedFilter}; not passed filter: {config["counters"]["filteredRecordCounter"]}; could not apply filter: {config["counters"]["filteredRecordExceptionCounter"]}')
   else:
-    pbar.set_description(f'{message} files: {config["counters"]["fileCounter"]}; records total: {config["counters"]["recordCounter"]}')
+    pbar.set_description(f'{message} files: {config["counters"]["fileCounter"]}; batches: {config["counters"]["batchCounter"]}; records total: {config["counters"]["recordCounter"]}')
   pbar.update(updateFrequency)
 
+# -----------------------------------------------------------------------------
 def create_batches(positions, batch_size):
     """Splits the list of position tuples into batches."""
+    batches = []
     for i in range(0, len(positions), batch_size):
-        yield positions[i:i + batch_size]
+        batches.append(positions[i:i + batch_size])
+    return batches
 
+# -----------------------------------------------------------------------------
 def read_chunk(filename, start, end):
     """Reads a chunk of the file from start to end positions."""
     with open(filename, 'rb') as file:
@@ -47,18 +52,22 @@ def fast_iter_batch(inputFilename, positions, func, tagName, pbar, config, updat
   """
 
   gc.disable()
-
-  for batch in create_batches(positions, batchSize):
+  batches = create_batches(positions, batchSize)
+   
+  counter = 0
+  #print(f'batches (size {batchSize}): {len(batches)}')
+  #for batch in create_batches(positions, batchSize):
+  for batch in batches:
+    config["counters"]["batchCounter"] += 1
     start = batch[0][0]  # Start of the first tuple in the batch
     end = batch[-1][1]   # End of the last tuple in the batch
 
+    #print(f'start {start}; end {end}')
     # Read the chunk of the file corresponding to the batch
     chunk_data = read_chunk(inputFilename, start, end)
- 
-    print(f'tagName: {tagName}')
-    context = ET.iterparse(BytesIO(b'<collection>' + chunk_data + b'</collection>'), tag=tagName)
-    print(f'context: {context}')
-
+    bytesStream = BytesIO(b'<collection>' + chunk_data + b'</collection>')
+    context = ET.iterparse(bytesStream, tag=tagName)
+    #print(f'context: {context}, tagName: {tagName}')
     try:
       # We assume that context is configured to only fire 'end' events for tagName
       #
@@ -75,22 +84,27 @@ def fast_iter_batch(inputFilename, positions, func, tagName, pbar, config, updat
         while record.getprevious() is not None:
           del record.getparent()[0]
 
+        #print(f'{config["counters"]["recordCounter"]} % {updateFrequency} == 0:')
         if config['counters']['recordCounter'] % updateFrequency == 0:
+          #print(f'PROGRESS BAR')
           gc.collect()
           updateProgressBar(pbar, config, updateFrequency)
+      bytesStream.close()
+      gc.collect()
     except Exception as e:
       print(f'error for tuple ({start},{end})')
       #print(chunk_data)
       sys.exit(0)
 
+    counter += 1
+    #print(f'DONE {counter}')
+    #time.sleep(1)
+    # update the remaining count after the loop has ended
+    updateProgressBar(pbar, config, updateFrequency)
 
-  # update the remaining count after the loop has ended
-  updateProgressBar(pbar, config, updateFrequency)
-
+    # We are done
+    del context
   gc.enable()
-
-  # We are done
-  del context
 
 
 # -----------------------------------------------------------------------------
@@ -454,14 +468,14 @@ def create1NOutputWriters(config, outputFolder, prefix):
   return outputWriters
 
 # -----------------------------------------------------------------------------
-def find_record_positions(filename, tagName, chunk_size=1024*1024):
+def find_record_positions(filename, tagName, chunkSize=1024*1024):
     """
     Find the start and end positions of records in a large XML file.
 
     Parameters:
     - filename: The path to the large XML file.
     - tagName: The tag of the records to locate.
-    - chunk_size: The size of each chunk to read from the file.
+    - chunkSize: The size of each chunk to read from the file.
 
     Returns:
     - A list of tuples where each tuple contains the start and end byte positions of a record.
@@ -479,7 +493,7 @@ def find_record_positions(filename, tagName, chunk_size=1024*1024):
     with open(filename, 'rb') as file:
 
         while True:
-            chunk = file.read(chunk_size)
+            chunk = file.read(chunkSize)
             if not chunk:
                 break
 
