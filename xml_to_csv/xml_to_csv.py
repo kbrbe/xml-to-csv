@@ -93,60 +93,6 @@ def main(inputFilenames, outputFilename, configFilename, prefix):
           utils.fast_iter_batch(inputFilename, positions, processRecord, recordTag, pbar, config, updateFrequency, batchSize, outputWriter, files, prefix)
 
 
-def find_record_positions(filename, tagName, chunk_size=1024*1024):
-    """
-    Find the start and end positions of records in a large XML file.
-
-    Parameters:
-    - filename: The path to the large XML file.
-    - chunk_size: The size of each chunk to read from the file.
-
-    Returns:
-    - A list of tuples where each tuple contains the start and end byte positions of a record.
-    """
-    record_start_pattern = re.compile(fr'<{tagName}.*?>'.encode('utf8'))
-    record_end_pattern = re.compile(fr'</{tagName}>'.encode('utf-8'))
-    
-    positions = []
-    current_position = 0
-    buffer = b''
-    pending_start = None
-    
-    with open(filename, 'rb') as file:
-        while True:
-            chunk = file.read(chunk_size)
-            if not chunk:
-                break
-            
-            buffer += chunk
-            
-            # Find start and end positions in the buffer
-            for match_start in record_start_pattern.finditer(buffer):
-                if pending_start is None:
-                    pending_start = match_start.start() + current_position
-                # Adjust the end position based on record_end_pattern search
-                end_pos_search_start = match_start.end()
-                end_match = record_end_pattern.search(buffer, end_pos_search_start)
-                if end_match:
-                    end_pos = end_match.end() + current_position
-                    positions.append((pending_start, end_pos))
-                    pending_start = None
-            
-            # Handle the case where records might be split across chunks
-            if pending_start is not None:
-                # End of the buffer without closing record
-                end_match = record_end_pattern.search(buffer)
-                if end_match:
-                    end_pos = end_match.end() + current_position
-                    positions.append((pending_start, end_pos))
-                    pending_start = None
-            
-            # Update the current position and discard the buffer
-            current_position += len(chunk)
-            buffer = buffer[-len(record_end_pattern.pattern):]  # Retain buffer tail for the next chunk
-    
-    return positions
-
 
 # -----------------------------------------------------------------------------
 def getValueList(elem, config, configKey):
