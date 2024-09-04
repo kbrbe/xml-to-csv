@@ -61,8 +61,13 @@ def main(inputFilenames, outputFilename, configFilename, prefix):
 
       pbar = tqdm(position=0)
 
-      updateFrequency=10000
-      batchSize=40000
+      # chunk and batch size can be configured per data source
+      #
+      chunkSize = int(config["execution"]["byteChunkSize"]) if "execution" in config and "byteChunkSize" in config["execution"] else 1024*1024
+      batchSize = int(config["execution"]["recordBatchSize"]) if "execution" in config and "recordBatchSize" in config["execution"] else 40000
+
+      # update progress bar every x records
+      updateFrequency=5000
 
       config['counters'] = {
         'batchCounter': 0,
@@ -78,7 +83,7 @@ def main(inputFilenames, outputFilename, configFilename, prefix):
 
           # use record tag string, because for finding the positions there is no explicit namespace
           # later for record parsing we should use the namespace-agnostic name
-          positions = utils.find_record_positions(inputFilename, recordTagString, chunkSize=1024*1024)
+          positions = utils.find_record_positions(inputFilename, recordTagString, chunkSize=chunkSize)
 
           # The first 6 arguments are related to the fast_iter function
           # everything afterwards will directly be given to processRecord

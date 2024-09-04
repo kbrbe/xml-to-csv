@@ -51,23 +51,26 @@ def fast_iter_batch(inputFilename, positions, func, tagName, pbar, config, updat
   Other non-keyword arguments (args) and keyword arguments (kwargs) are provided to "func".
   """
 
+  # disable automatic garbage collection as we will do it manually
   gc.disable()
+
+  # Given all the start/end positions of records, create larger batches containing multiple records
   batches = create_batches(positions, batchSize)
    
-  counter = 0
-  #print(f'batches (size {batchSize}): {len(batches)}')
-  #for batch in create_batches(positions, batchSize):
   for batch in batches:
     config["counters"]["batchCounter"] += 1
     start = batch[0][0]  # Start of the first tuple in the batch
     end = batch[-1][1]   # End of the last tuple in the batch
 
-    #print(f'start {start}; end {end}')
-    # Read the chunk of the file corresponding to the batch
+    # Read the chunk of the file from the beginning of the batch to the end of the batch
     chunk_data = read_chunk(inputFilename, start, end)
+
+    # we need to store the byte stream in a variable so we can clear it later
     bytesStream = BytesIO(b'<collection>' + chunk_data + b'</collection>')
+
+    # only fire for end events (default) and additionally only fire for tagName elements
     context = ET.iterparse(bytesStream, tag=tagName)
-    #print(f'context: {context}, tagName: {tagName}')
+
     try:
       # We assume that context is configured to only fire 'end' events for tagName
       #
@@ -75,35 +78,32 @@ def fast_iter_batch(inputFilename, positions, func, tagName, pbar, config, updat
         # call the given function and provide it the given parameters
         func(record, config, *args, **kwargs)
 
-        # Update progress bar
         config['counters']['recordCounter'] += 1
 
         # clear to save RAM
         record.clear()
+
         # delete preceding siblings to save memory (https://lxml.de/3.2/parsing.html)
         while record.getprevious() is not None:
           del record.getparent()[0]
 
-        #print(f'{config["counters"]["recordCounter"]} % {updateFrequency} == 0:')
         if config['counters']['recordCounter'] % updateFrequency == 0:
-          #print(f'PROGRESS BAR')
-          gc.collect()
           updateProgressBar(pbar, config, updateFrequency)
+
+      # free up RAM after parsing all recors of the batch
       bytesStream.close()
       gc.collect()
     except Exception as e:
       print(f'error for tuple ({start},{end})')
-      #print(chunk_data)
       sys.exit(0)
 
-    counter += 1
-    #print(f'DONE {counter}')
-    #time.sleep(1)
     # update the remaining count after the loop has ended
     updateProgressBar(pbar, config, updateFrequency)
 
     # We are done
     del context
+
+  # re-enable automatic gargabe collection
   gc.enable()
 
 
