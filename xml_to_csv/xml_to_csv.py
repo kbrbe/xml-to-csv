@@ -11,7 +11,6 @@ import enchant
 import hashlib
 import csv
 import re
-from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack
 from argparse import ArgumentParser
 from tqdm import tqdm
@@ -23,7 +22,7 @@ ALL_NS = {'marc': NS_MARCSLIM}
 
 
 # -----------------------------------------------------------------------------
-def main(inputFilenames, outputFilename, configFilename, prefix):
+def main(inputFilenames, outputFilename, configFilename, prefix, incrementalProcessing):
   """This script reads XML files in and extracts several fields to create CSV files."""
 
 
@@ -61,7 +60,7 @@ def main(inputFilenames, outputFilename, configFilename, prefix):
 
       pbar = tqdm(position=0)
 
-      # chunk and batch size can be configured per data source
+      # chunk and batch size can be configured per data source, hence part of the config
       #
       chunkSize = int(config["execution"]["byteChunkSize"]) if "execution" in config and "byteChunkSize" in config["execution"] else 1024*1024
       batchSize = int(config["execution"]["recordBatchSize"]) if "execution" in config and "recordBatchSize" in config["execution"] else 40000
@@ -81,13 +80,32 @@ def main(inputFilenames, outputFilename, configFilename, prefix):
         if inputFilename.endswith('.xml'):
           config['counters']['fileCounter'] += 1
 
-          # use record tag string, because for finding the positions there is no explicit namespace
-          # later for record parsing we should use the namespace-agnostic name
-          positions = utils.find_record_positions(inputFilename, recordTagString, chunkSize=chunkSize)
+          if incrementalProcessing:
+            print(f'incremental processing ...')
+            print()
 
-          # The first 6 arguments are related to the fast_iter function
-          # everything afterwards will directly be given to processRecord
-          utils.fast_iter_batch(inputFilename, positions, processRecord, recordTag, pbar, config, updateFrequency, batchSize, outputWriter, files, prefix)
+            # use record tag string, because for finding the positions there is no explicit namespace
+            # later for record parsing we should use the namespace-agnostic name
+            positions = utils.find_record_positions(inputFilename, recordTagString, chunkSize=chunkSize)
+
+            # The first 6 arguments are related to the fast_iter function
+            # everything afterwards will directly be given to processRecord
+            utils.fast_iter_batch(inputFilename, positions, processRecord, recordTag, pbar, config, updateFrequency, batchSize, outputWriter, files, prefix)
+
+          else:
+            print(f'regular iterative processing ...')
+            print()
+            context = ET.iterparse(inputFilename, tag=recordTag)
+            utils.fast_iter(
+              context, # the XML context
+              processRecord, # the function that is called for every found recordTag
+              pbar, # the progress bar that should be updated
+              config, # configuration object with counters and other data
+              updateFrequency, # after how many records the progress bar should be updated
+              outputWriter, # paramter for processRecord: CSV writer for main output file
+              files, # parameter for processRecord: dictionary of CSV writers for each column 1:n relationships
+              prefix # parameter for processRecord: prefix for output files
+            )
 
 
 
@@ -219,6 +237,7 @@ def parseArguments():
   parser.add_argument('-c', '--config-file', action='store', required=True, help='The config file with XPath expressions to extract')
   parser.add_argument('-p', '--prefix', action='store', required=False, default='', help='If given, one file per column with this prefix will be generated to resolve 1:n relationships')
   parser.add_argument('-o', '--output-file', action='store', required=True, help='The output CSV file containing extracted fields based on the provided config')
+  parser.add_argument('-i', '--incremental', action='store_true', help='Optional flag to indicate if the input files should be read incremental (identifying records with string-parsing in chunks and parsing XML records in batch)')
   args = parser.parse_args()
 
   return args
@@ -226,4 +245,4 @@ def parseArguments():
 
 if __name__ == '__main__':
   args = parseArguments()
-  main(args.inputFiles, args.output_file, args.config_file, args.prefix)
+  main(args.inputFiles, args.output_file, args.config_file, args.prefix, args.incremental)
