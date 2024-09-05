@@ -26,14 +26,12 @@ def main(inputFilenames, outputFilename, configFilename, prefix, incrementalProc
   """This script reads XML files in and extracts several fields to create CSV files."""
 
 
+  # read the config file
+  #
   with open(configFilename, 'r') as configFile:
     config = json.load(configFile)
   
-  # used for namespace-agnostic extraction of XML-parsed records
-  recordTag = getRecordTagName(config)
 
-  # used for initial string-based identification of start/end position of records
-  recordTagString = config['recordTagString']
 
   outputFolder = os.path.dirname(outputFilename)
   
@@ -60,10 +58,6 @@ def main(inputFilenames, outputFilename, configFilename, prefix, incrementalProc
 
       pbar = tqdm(position=0)
 
-      # chunk and batch size can be configured per data source, hence part of the config
-      #
-      chunkSize = int(config["execution"]["byteChunkSize"]) if "execution" in config and "byteChunkSize" in config["execution"] else 1024*1024
-      batchSize = int(config["execution"]["recordBatchSize"]) if "execution" in config and "recordBatchSize" in config["execution"] else 40000
 
       # update progress bar every x records
       updateFrequency=5000
@@ -75,6 +69,20 @@ def main(inputFilenames, outputFilename, configFilename, prefix, incrementalProc
         'filteredRecordCounter': 0,
         'filteredRecordExceptionCounter': 0
       }
+  
+      # used for namespace-agnostic extraction of XML-parsed records
+      recordTag = getRecordTagName(config)
+
+      if incrementalProcessing:
+        # used for initial string-based identification of start/end position of records
+        recordTagString = config['recordTagString']
+
+        # chunk and batch size can be configured per data source, hence part of the config
+        #
+        chunkSize = int(config["execution"]["byteChunkSize"]) if "execution" in config and "byteChunkSize" in config["execution"] else 1024*1024
+        batchSize = int(config["execution"]["recordBatchSize"]) if "execution" in config and "recordBatchSize" in config["execution"] else 40000
+
+
 
       for inputFilename in inputFilenames:
         if inputFilename.endswith('.xml'):
