@@ -7,6 +7,7 @@ import os
 import sys
 import json
 import itertools
+import logging
 import enchant
 import hashlib
 import csv
@@ -22,7 +23,7 @@ ALL_NS = {'marc': NS_MARCSLIM}
 
 
 # -----------------------------------------------------------------------------
-def main(inputFilenames, outputFilename, configFilename, prefix, incrementalProcessing):
+def main(inputFilenames, outputFilename, configFilename, prefix, incrementalProcessing, logLevel='INFO', logFile=None):
   """This script reads XML files in and extracts several fields to create CSV files."""
 
 
@@ -32,6 +33,7 @@ def main(inputFilenames, outputFilename, configFilename, prefix, incrementalProc
     config = json.load(configFile)
   
 
+  setupLogging(logLevel, logFile)
 
   outputFolder = os.path.dirname(outputFilename)
   
@@ -89,8 +91,7 @@ def main(inputFilenames, outputFilename, configFilename, prefix, incrementalProc
           config['counters']['fileCounter'] += 1
 
           if incrementalProcessing:
-            print(f'incremental processing ...')
-            print()
+            logging.info(f'incremental processing ...')
 
             # use record tag string, because for finding the positions there is no explicit namespace
             # later for record parsing we should use the namespace-agnostic name
@@ -101,8 +102,8 @@ def main(inputFilenames, outputFilename, configFilename, prefix, incrementalProc
             utils.fast_iter_batch(inputFilename, positions, processRecord, recordTag, pbar, config, updateFrequency, batchSize, outputWriter, files, prefix)
 
           else:
-            print(f'regular iterative processing ...')
-            print()
+            logging.info(f'regular iterative processing ...')
+
             context = ET.iterparse(inputFilename, tag=recordTag)
             utils.fast_iter(
               context, # the XML context
@@ -116,6 +117,14 @@ def main(inputFilenames, outputFilename, configFilename, prefix, incrementalProc
             )
 
 
+# -----------------------------------------------------------------------------
+def setupLogging(logLevel, logFile):
+
+  logFormat = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+  if logFile:
+    logging.basicConfig(level=logLevel, format=logFormat, filename=logFile, filemode='a')
+  else:
+    logging.basicConfig(level=logLevel, format=logFormat)
 
 # -----------------------------------------------------------------------------
 def getValueList(elem, config, configKey):
@@ -126,7 +135,7 @@ def getValueList(elem, config, configKey):
   # first check if we can extract the data we should extract
   #
   if configKey not in config:
-    print(f'No key "{configKey}" in config!')
+    logging.error(f'No key "{configKey}" in config!')
     return None
 
   recordID = utils.getElementValue(elem.find(config['recordIDExpression'], ALL_NS))
@@ -166,7 +175,7 @@ def getValueList(elem, config, configKey):
 
                 # we are not doing recursive calls here
                 if subfieldValueType == 'json':
-                  print(f'type "json" not allowed for subfields')
+                  logging.error(f'type "json" not allowed for subfields')
                   continue
                 subfieldValues = v.xpath(subfieldExpression, namespaces=ALL_NS)
 
@@ -175,19 +184,19 @@ def getValueList(elem, config, configKey):
                 #
                 subfieldDelimiter = ';'
                 if len(subfieldValues) > 1:
-                  print(f'Warning: multiple values for subfield {subfieldColumnName} in record {recordID} (concatenated with {subfieldDelimiter})')
+                  logging.warning(f'multiple values for subfield {subfieldColumnName} in record {recordID} (concatenated with {subfieldDelimiter})')
                 subfieldTextValues = [s.text for s in subfieldValues]
                 allSubfieldsData[subfieldColumnName] = subfieldDelimiter.join(subfieldTextValues)
 
               # the dictionary of subfield lists becomes the JSON value of this column
               recordData[columnName] = allSubfieldsData
             else:
-              print(f'JSON specified, but no subfields given')
+              logging.error(f'JSON specified, but no subfields given')
           else:
             # other value types require to analyze the text content
-            utils.extractFieldValue(v.text, valueType, recordData[columnName])
+            utils.extractFieldValue(v.text, valueType, recordData[columnName], recordID, config)
         else:
-          print(f'No valueType given!')
+          logging.error(f'No valueType given!')
     
   recordData = {k:"" if not v else v for k,v in recordData.items()}
   return recordData
@@ -246,6 +255,8 @@ def parseArguments():
   parser.add_argument('-p', '--prefix', action='store', required=False, default='', help='If given, one file per column with this prefix will be generated to resolve 1:n relationships')
   parser.add_argument('-o', '--output-file', action='store', required=True, help='The output CSV file containing extracted fields based on the provided config')
   parser.add_argument('-i', '--incremental', action='store_true', help='Optional flag to indicate if the input files should be read incremental (identifying records with string-parsing in chunks and parsing XML records in batch)')
+  parser.add_argument('-l', '--log-file', action='store', help='The optional name of the logfile')
+  parser.add_argument('-L', '--log-level', action='store', default='INFO', help='The log level, default is INFO')
   args = parser.parse_args()
 
   return args
@@ -253,4 +264,4 @@ def parseArguments():
 
 if __name__ == '__main__':
   args = parseArguments()
-  main(args.inputFiles, args.output_file, args.config_file, args.prefix, args.incremental)
+  main(args.inputFiles, args.output_file, args.config_file, args.prefix, args.incremental, logLevel=args.log_level, logFile=args.log_file)

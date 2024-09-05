@@ -3,6 +3,7 @@ import time
 import gc
 import lxml.etree as ET
 import unicodedata as ud
+import logging
 from io import BytesIO
 import enchant
 import csv
@@ -13,6 +14,8 @@ from stdnum import exceptions
 
 NS_MARCSLIM = 'http://www.loc.gov/MARC21/slim'
 ALL_NS = {'marc': NS_MARCSLIM}
+
+logger = logging.getLogger(__name__)
 
 # -----------------------------------------------------------------------------
 def updateProgressBar(pbar, config, updateFrequency):
@@ -94,7 +97,7 @@ def fast_iter_batch(inputFilename, positions, func, tagName, pbar, config, updat
       bytesStream.close()
       gc.collect()
     except Exception as e:
-      print(f'error for tuple ({start},{end})')
+      logging.error(f'error for tuple ({start},{end})')
       sys.exit(0)
 
     # update the remaining count after the loop has ended
@@ -162,9 +165,13 @@ def parseDate(date, patterns):
   >>> parseDate('25/04/1988', ['%Y-%m-%d', '%Y/%m/%d', '%Y/%m/%d', '%d/%m/%Y'])
   '1988-04-25'
 
-  An empty value if the pattern is not found.
+  An exception is thrown if the date could not be parsed with the given patterns
   >>> parseDate('25/04/1988', ['%Y-%m-%d', '%Y/%m/%d'])
-  ''
+  Traceback (most recent call last):
+      ...
+  Exception: Could not parse date "25/04/1988" with the given patterns "['%Y-%m-%d', '%Y/%m/%d']"
+
+
 
   A correct date string for dates without delimiter.
   >>> parseDate('19880425', ['%Y-%m-%d', '%Y%m%d'])
@@ -211,7 +218,7 @@ def parseDate(date, patterns):
       pass
 
   if parsedDate == None:
-    return ''
+    raise Exception(f'Could not parse date "{date}" with the given patterns "{patterns}"')
   else:
     return parsedDate
 
@@ -396,15 +403,19 @@ def passFilter(elem, filterConfig):
 
   
 # -----------------------------------------------------------------------------
-def extractFieldValue(value, valueType, columnData):
+def extractFieldValue(value, valueType, columnData, recordID, config):
 
+  datePatterns = config['datePatterns']
   vNorm = None
   if value:
     # parse different value types, for example dates or regular strings
     #
     if valueType == 'date':
-      vNorm = utils.parseDate(value, datePatterns)
-      columnData.append(vNorm)
+      try:
+        vNorm = parseDate(value, datePatterns)
+        columnData.append(vNorm)
+      except Exception as e:
+        logging.warning(f'record {recordID}: {e}')
     elif valueType == 'text':
       columnData.append(value)
     elif valueType == 'isniURL':
@@ -413,17 +424,17 @@ def extractFieldValue(value, valueType, columnData):
         vNorm = isniComponents[1]
         columnData.append(vNorm)
       else:
-        print(f'Warning: malformed ISNI URL for authority {recordID}: "{value}"')
+        logger.warning(f'record {recordID}: malformed ISNI URL "{value}"')
     elif valueType == 'bnfURL':
       bnfComponents = value.split('ark:/12148/')
       if len(bnfComponents) > 1:
         vNorm = bnfComponents[1]
         columnData.append(vNorm)
       else:
-        print(f'Warning: malformed BnF URL for authority {recordID}: "{value}"')
+        logging.warning(f'record {recordID}: malformed BnF URL "{value}"')
     
     else:
-      print(f'Unknown value type "{valueType}"')
+      logging.error(f'Unknown value type in config "{valueType}", should be "date", "text", "isniURL", or "bnfURL"')
 
 
 # -----------------------------------------------------------------------------
