@@ -229,6 +229,8 @@ def processRecord(elem, config, outputWriter, files, prefix):
         return None
 
   recordData = getValueList(elem, config, "dataFields")
+  identifierPrefix = config["recordIDPrefix"] if "recordIDPrefix" in config else ''
+  recordData[config["recordIDColumnName"]] = identifierPrefix + recordData[config["recordIDColumnName"]]
   outputWriter.writerow(recordData)
 
   # Create a CSV output file for each selected columns to resolve 1:n relationships
