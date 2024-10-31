@@ -23,7 +23,7 @@ ALL_NS = {'marc': NS_MARCSLIM}
 
 
 # -----------------------------------------------------------------------------
-def main(inputFilenames, outputFilename, configFilename, prefix, incrementalProcessing, logLevel='INFO', logFile=None):
+def main(inputFilenames, outputFilename, configFilename, dateConfigFilename, prefix, incrementalProcessing, logLevel='INFO', logFile=None):
   """This script reads XML files in and extracts several fields to create CSV files."""
 
 
@@ -31,7 +31,14 @@ def main(inputFilenames, outputFilename, configFilename, prefix, incrementalProc
   #
   with open(configFilename, 'r') as configFile:
     config = json.load(configFile)
+
+  # read the date config file
+  #
+  with open(dateConfigFilename, 'r') as dateConfigFile:
+    dateConfig = json.load(dateConfigFile)
   
+  # build a single numeric month lookup data structure
+  monthMapping = utils.buildMonthMapping(dateConfig)
 
   setupLogging(logLevel, logFile)
 
@@ -47,7 +54,14 @@ def main(inputFilenames, outputFilename, configFilename, prefix, incrementalProc
     with ExitStack() as stack:
       files = utils.create1NOutputWriters(config, outputFolder, prefix)
 
-      outputFields = [config["recordIDColumnName"]] + [f["columnName"] for f in config["dataFields"]]
+      # define columns for the output based on config
+      outputFields = [config["recordIDColumnName"]]
+      for f in config["dataFields"]:
+        if "keepOriginal" in f and f["keepOriginal"] == "true":
+          columnNameOriginal = utils.getOriginalColumnName(f)
+          outputFields.append(columnNameOriginal)
+        outputFields.append(f["columnName"])
+
       outputWriter = csv.DictWriter(outFile, fieldnames=outputFields, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
       
       # write the CSV header for the output file
@@ -99,7 +113,7 @@ def main(inputFilenames, outputFilename, configFilename, prefix, incrementalProc
 
             # The first 6 arguments are related to the fast_iter function
             # everything afterwards will directly be given to processRecord
-            utils.fast_iter_batch(inputFilename, positions, processRecord, recordTag, pbar, config, updateFrequency, batchSize, outputWriter, files, prefix)
+            utils.fast_iter_batch(inputFilename, positions, processRecord, recordTag, pbar, config, dateConfig, monthMapping, updateFrequency, batchSize, outputWriter, files, prefix)
 
           else:
             logging.info(f'regular iterative processing ...')
@@ -110,6 +124,8 @@ def main(inputFilenames, outputFilename, configFilename, prefix, incrementalProc
               processRecord, # the function that is called for every found recordTag
               pbar, # the progress bar that should be updated
               config, # configuration object with counters and other data
+              dateConfig, # configuration object for date parsing
+              monthMapping, # lookup of calendar months
               updateFrequency, # after how many records the progress bar should be updated
               outputWriter, # paramter for processRecord: CSV writer for main output file
               files, # parameter for processRecord: dictionary of CSV writers for each column 1:n relationships
@@ -122,14 +138,14 @@ def setupLogging(logLevel, logFile):
 
   logFormat = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
   if logFile:
-    logging.basicConfig(level=logLevel, format=logFormat, filename=logFile, filemode='a')
+    logging.basicConfig(level=logLevel, format=logFormat, filename=logFile, filemode='w')
   else:
     logging.basicConfig(level=logLevel, format=logFormat)
 
 # -----------------------------------------------------------------------------
-def getValueList(elem, config, configKey):
+def getValueList(elem, config, configKey, dateConfig, monthMapping):
+  """This function extracts all values from the XML element elem according to the config"""
 
-  datePatterns = config["datePatterns"]
   keyParts = []
 
   # first check if we can extract the data we should extract
@@ -161,6 +177,7 @@ def getValueList(elem, config, configKey):
 
         if 'valueType' in p:
           valueType = p['valueType']
+
           if valueType == 'json':
             if "subfields" in p:
               subfieldConfigEntries = p['subfields']
@@ -194,7 +211,15 @@ def getValueList(elem, config, configKey):
               logging.error(f'JSON specified, but no subfields given')
           else:
             # other value types require to analyze the text content
-            utils.extractFieldValue(v.text, valueType, recordData[columnName], recordID, config)
+            parsedValue = utils.extractFieldValue(v.text, valueType, recordID, config, dateConfig, monthMapping)
+
+            # add original value for current data field if necessary
+            if "keepOriginal" in p and p["keepOriginal"] == "true":
+              originalColumnName = utils.getOriginalColumnName(p)
+              recordData[columnName].append({columnName: parsedValue, originalColumnName: v.text})
+            else:
+              recordData[columnName].append({columnName: parsedValue})
+
         else:
           logging.error(f'No valueType given!')
     
@@ -216,7 +241,7 @@ def getRecordTagName(config):
 
 
 # -----------------------------------------------------------------------------
-def processRecord(elem, config, outputWriter, files, prefix):
+def processRecord(elem, config, dateConfig, monthMapping, outputWriter, files, prefix):
 
   if "recordFilter" in config:
     try:
@@ -228,22 +253,47 @@ def processRecord(elem, config, outputWriter, files, prefix):
         config['counters']['filteredRecordExceptionCounter'] += 1
         return None
 
-  recordData = getValueList(elem, config, "dataFields")
+  recordData = getValueList(elem, config, "dataFields", dateConfig, monthMapping)
+
   identifierPrefix = config["recordIDPrefix"] if "recordIDPrefix" in config else ''
   recordData[config["recordIDColumnName"]] = identifierPrefix + recordData[config["recordIDColumnName"]]
+
+  # (1) write output to the general CSV file
+  outputRow = {config["recordIDColumnName"]: identifierPrefix + recordData[config["recordIDColumnName"]]}
+  for columnName, extractedValues in recordData.items():
+    if columnName != config["recordIDColumnName"]:
+      outputRow[columnName] = []
+      if extractedValues:
+        for valueDict in extractedValues:
+          for valueColumnName, singleValue in valueDict.items():
+            if valueColumnName in outputRow:
+              outputRow[valueColumnName].append(singleValue)
+            else:
+              outputRow[valueColumnName] = [singleValue]
+      else:
+        outputRow[columnName] = ''
   outputWriter.writerow(recordData)
 
-  # Create a CSV output file for each selected columns to resolve 1:n relationships
+  # (2) Create a CSV output file for each selected columns to resolve 1:n relationships
   if prefix != "":
     recordID = recordData[config["recordIDColumnName"]]
+
     for columnName, valueList in recordData.items():
+
       if valueList and columnName != config["recordIDColumnName"]:
+
         if isinstance(valueList, list):
           # simple 1:n relationship: one row per value
+          # but it is one dictionary per relationship, 
+          # because we eventually have the parsed value and the original value
           for v in valueList:
-            files[columnName].writerow({config["recordIDColumnName"]: recordID, columnName: v})
+            outputRow = v
+            outputRow.update({config["recordIDColumnName"]: recordID})
+            files[columnName].writerow(outputRow)
+
         elif isinstance(valueList, dict):
           # complex 1:n relationship: one row per value, but subfields require multiple columns
+          # this data comes from valueType JSON
           valueList.update({config["recordIDColumnName"]: recordID})
           files[columnName].writerow(valueList)
           
@@ -254,6 +304,7 @@ def parseArguments():
   parser = ArgumentParser(description='This script reads an XML file in MARC slim format and extracts several fields to create a CSV file.')
   parser.add_argument('inputFiles', nargs='+', help='The input files containing XML records')
   parser.add_argument('-c', '--config-file', action='store', required=True, help='The config file with XPath expressions to extract')
+  parser.add_argument('-d', '--date-config-file', action='store', required=True, help='The config file for date parsing')
   parser.add_argument('-p', '--prefix', action='store', required=False, default='', help='If given, one file per column with this prefix will be generated to resolve 1:n relationships')
   parser.add_argument('-o', '--output-file', action='store', required=True, help='The output CSV file containing extracted fields based on the provided config')
   parser.add_argument('-i', '--incremental', action='store_true', help='Optional flag to indicate if the input files should be read incremental (identifying records with string-parsing in chunks and parsing XML records in batch)')
@@ -266,4 +317,4 @@ def parseArguments():
 
 if __name__ == '__main__':
   args = parseArguments()
-  main(args.inputFiles, args.output_file, args.config_file, args.prefix, args.incremental, logLevel=args.log_level, logFile=args.log_file)
+  main(args.inputFiles, args.output_file, args.config_file, args.date_config_file, args.prefix, args.incremental, logLevel=args.log_level, logFile=args.log_file)

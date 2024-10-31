@@ -45,7 +45,7 @@ def read_chunk(filename, start, end):
         return file.read(end - start)
 
 # -----------------------------------------------------------------------------
-def fast_iter_batch(inputFilename, positions, func, tagName, pbar, config, updateFrequency=100, batchSize=100, *args, **kwargs):
+def fast_iter_batch(inputFilename, positions, func, tagName, pbar, config, dateConfig, monthMapping, updateFrequency=100, batchSize=100, *args, **kwargs):
   """
   Adapted from http://stackoverflow.com/questions/12160418
 
@@ -79,7 +79,7 @@ def fast_iter_batch(inputFilename, positions, func, tagName, pbar, config, updat
       #
       for event, record in context:
         # call the given function and provide it the given parameters
-        func(record, config, *args, **kwargs)
+        func(record, config, dateConfig, monthMapping, *args, **kwargs)
 
         config['counters']['recordCounter'] += 1
 
@@ -111,7 +111,7 @@ def fast_iter_batch(inputFilename, positions, func, tagName, pbar, config, updat
 
 
 # -----------------------------------------------------------------------------
-def fast_iter(context, func, pbar, config, updateFrequency=100, *args, **kwargs):
+def fast_iter(context, func, pbar, config, dateConfig, monthMapping, updateFrequency=100, *args, **kwargs):
   """
   Adapted from http://stackoverflow.com/questions/12160418
 
@@ -125,7 +125,7 @@ def fast_iter(context, func, pbar, config, updateFrequency=100, *args, **kwargs)
   for event, record in context:
 
     # call the given function and provide it the given parameters
-    func(record, config, *args, **kwargs)
+    func(record, config, dateConfig, monthMapping, *args, **kwargs)
 
     # Update progress bar
     config['counters']['recordCounter'] += 1
@@ -171,17 +171,20 @@ def parseDate(date, patterns):
       ...
   Exception: Could not parse date "25/04/1988" with the given patterns "['%Y-%m-%d', '%Y/%m/%d']"
 
-
-
   A correct date string for dates without delimiter.
   >>> parseDate('19880425', ['%Y-%m-%d', '%Y%m%d'])
   '1988-04-25'
 
   Only year and month are invalid.
   >>> parseDate('1988-04', ['%Y%m', '%Y-%m'])
-  ''
+  Traceback (most recent call last):
+      ...
+  Exception: Could not parse date "1988-04" with the given patterns "['%Y%m', '%Y-%m']"
+
   >>> parseDate('198804', ['%Y-%m', '%Y%m'])
-  ''
+  Traceback (most recent call last):
+      ...
+  Exception: Could not parse date "198804" with the given patterns "['%Y-%m', '%Y%m']"
 
   Keep year if this is the only provided information.
   >>> parseDate('1988', ['%Y-%m-%d', '%Y'])
@@ -195,6 +198,16 @@ def parseDate(date, patterns):
   >>> parseDate('1988.', ['%Y', '%Y.'])
   '1988'
 
+  >>> parseDate('19340417', ["%Y", "(%Y)", "[%Y]", "%Y-%m-%d", "%Y--%m-%d", "%Y--%m--%d", "%d/%m/%Y", "%Y/%m/%d", "%Y%m%d", "%Y----", "%Y.%m.%d", "%d.%m.%Y"])
+  '1934-04-17'
+
+  >>> parseDate('1980----', ["%Y", "(%Y)", "[%Y]", "%Y-%m-%d", "%Y--%m-%d", "%Y--%m--%d", "%d/%m/%Y", "%Y/%m/%d", "%Y%m%d", "%Y----", "%Y.%m.%d", "%d.%m.%Y"])
+  '1980'
+
+  >>> parseDate('1233?', ["%Y", "(%Y)", "[%Y]", "%Y-%m-%d", "%Y--%m-%d", "%Y--%m--%d", "%d/%m/%Y", "%Y/%m/%d", "%Y%m%d", "%Y----", "%Y.%m.%d", "%d.%m.%Y"]) 
+  Traceback (most recent call last):
+      ...
+  Exception: Could not parse date "1233?" with the given patterns "['%Y', '(%Y)', '[%Y]', '%Y-%m-%d', '%Y--%m-%d', '%Y--%m--%d', '%d/%m/%Y', '%Y/%m/%d', '%Y%m%d', '%Y----', '%Y.%m.%d', '%d.%m.%Y']"
 
   """
 
@@ -210,7 +223,9 @@ def parseDate(date, patterns):
         if any(ele in date for ele in ['(', '[', ')', ']', '.']):
           parsedDate = str(tmp.year)
         else:
-          parsedDate = ''
+          parsedDate = None
+      elif len(date) == 8 and date.endswith('----'):
+        parsedDate = str(tmp.year)
       else:
         parsedDate = str(tmp)
       break
@@ -222,6 +237,214 @@ def parseDate(date, patterns):
   else:
     return parsedDate
 
+# -----------------------------------------------------------------------------
+def roman_to_century(roman_numeral):
+    roman_map = {
+        'I': 1,
+        'V': 5,
+        'X': 10,
+        'L': 50,
+        'C': 100,
+        'D': 500,
+        'M': 1000
+    }
+    
+    total = 0
+    prev_value = 0
+    
+    for char in reversed(roman_numeral):
+        value = roman_map[char]
+        if value < prev_value:
+            total -= value
+        else:
+            total += value
+        prev_value = value
+        
+    century = (total - 1) // 100 + 1  # Convert to century
+    return f"{century}00"  # Return in the form of '17xx'
+
+# -----------------------------------------------------------------------------
+def compile_pattern(pattern, components):
+    """Replaces placeholders in the pattern with actual regex components.
+    >>> config = {
+    ...    "components": {
+    ...      "keywords": {
+    ...        "before": r"\b(?:before|avant|Avant)\b",
+    ...        "after": r"\b(?:after|après|Après)\b",
+    ...        "and": r"\b(?:and|et|Et)\b",
+    ...      },
+    ...      "months": {
+    ...        "English": { "November": "11", "April": "04" }
+    ...      },
+    ...      "year": r"(\d{4})",
+    ...      "roman_numeral": r"(X{0,3}|IX|V?I{0,3})"
+    ...    },
+    ...    "rules": {
+    ...      "roman_century": {
+    ...          "pattern": r"%(roman_numeral)s(e|e|ème|e siècle)",
+    ...          "template": "%s~"
+    ...       },
+    ...      "before_year": { "pattern": r"%(keywords.before)s\s+%(year)s", "template": "%s~" },
+    ...      "range_with_and": { "pattern": r"%(keywords.before)s\s+%(month)s\s+%(year)s\s+%(keywords.and)s\s+%(keywords.after)s\s+%(month)s\s+%(year)s", "template": "%s-%s/%s-%s"}
+    ...    }
+    ... }
+    >>> pattern = compile_pattern(r"%(keywords.before)s\\s+%(year)s", config["components"])
+    >>> re.match(pattern, "Avant 2023").group(0)
+    'Avant 2023'
+
+    >>> pattern = compile_pattern(r"%(keywords.before)s\\s+(%(months.generic)s)\\s+%(year)s\\s+%(keywords.and)s\\s+%(keywords.after)s\\s+(%(months.generic)s)\\s+%(year)s", config["components"])
+    >>> re.match(pattern, "Before November 2004 and after April 2002").group(0)
+    'Before November 2004 and after April 2022'
+
+    """ 
+    placeholders = re.findall(r'%\(([^)]+)\)s', pattern)
+    component_map = {}
+
+    for ph in placeholders:
+        if ph == 'months.generic':
+            # Create a regex for all month names across languages
+            month_patterns = []
+            for language, months in components['months'].items():
+                month_patterns.extend(months.keys())
+            month_names = '|'.join(re.escape(month) for month in month_patterns)
+            component_map[ph] = rf"\b{month_names}"
+        else:
+            keys = ph.split('.')
+            if len(keys) == 2:
+                main_key, sub_key = keys
+                component_map[ph] = components[main_key][sub_key]
+            else:
+                component_map[ph] = components.get(ph)
+
+            if component_map[ph] is None:
+              raise ValueError(f'Missing component for {ph} in date configuration')
+
+    # Replace placeholders in the pattern
+    return pattern % component_map
+
+# -----------------------------------------------------------------------------
+def buildMonthMapping(config):
+  """ Creates a single lookup data structure for multilingual month names.
+  >>> buildMonthMapping({'components': {'months': {'English': {'January': '01', 'November': '11'}, 'German': {'Januar': '01', 'November': '11'} }}})
+  {'january': '01', 'november': '11', 'januar': '01'}
+  """
+  monthMapping = {}
+  for lang, langDict in config['components']['months'].items():
+    for monthString, monthNumerical in langDict.items():
+      if monthString not in monthMapping:
+        monthMapping[getNormalizedDateString(monthString)] = monthNumerical
+  return monthMapping
+
+# -----------------------------------------------------------------------------
+def getNumericMonth(monthString, monthMapping):
+  """ Gets the numerical representation of a month string.
+  >>> getNumericMonth("November", {"Januar": "01", "November": "11"})
+  '11'
+  >>> getNumericMonth("December", {"Januar": "01", "November": "11"})
+  Traceback (most recent call last):
+      ...
+  KeyError: 'No numerical value for month "December" found in config'
+  """
+  if monthString in monthMapping:
+    return monthMapping[monthString]
+  else:
+    raise KeyError(f'No numerical value for month "{monthString}" found in config')
+
+# -----------------------------------------------------------------------------
+def parseComplexDate(input_str, config, monthMapping):
+    """Parse a date string based on the provided configuration.
+    
+    Args:
+        input_str (str): The date string to parse.
+        config (dict): The configuration dictionary containing components and rules.
+
+    Returns:
+        str: The standardized date in EDTF format, or None if no match is found.
+
+    >>> config = {
+    ...    "components": {
+    ...      "keywords": {
+    ...        "before": r"\\b(?:before|avant|Avant)\\b",
+    ...        "after": r"\\b(?:after|après|Après)\\b",
+    ...        "and": r"\\b(?:and|et|Et)\\b",
+    ...      },
+    ...      "months": {
+    ...        "English": { "November": "11", "April": "04" }
+    ...      },
+    ...      "year": r"(\d{4})"
+    ...    },
+    ...    "rules": {
+    ...      "before_year": { "pattern": r"%(keywords.before)s\s+%(year)s", "template": "%s~" },
+    ...      "range_with_and_month": { "pattern": r"%(keywords.before)s\s+(%(months.generic)s)\s+%(year)s\s+%(keywords.and)s\s+%(keywords.after)s\s+(%(months.generic)s)\s+%(year)s", "template": "%s-%s/%s-%s"}
+    ...    }
+    ... }
+    >>> parseComplexDate("avant 1980", config, {"november": "11", "april": "04"})
+    '[..1980]'
+    >>> parseComplexDate("before November 1980 and after April 1978", config, {"november": "11", "april": "04"})
+    '1978-04/1980-11'
+    """
+    # Normalize input (optional, depending on your needs)
+    norm_input = getNormalizedDateString(input_str)
+
+    results = []
+
+    #print(f'input string: {norm_input}')
+    for rule_name, rule in config["rules"].items():
+        pattern_str = compile_pattern(rule["pattern"], config["components"])
+        pattern = re.compile(pattern_str, re.IGNORECASE)
+        match = pattern.search(norm_input)
+
+        if match:
+            #print(f'rule "{rule_name}" match with pattern "{pattern_str}" for input string "{norm_input}". Groups are {match.groups()}')
+
+            # Check for more specific rules first
+            if rule_name == "range_with_and_month":
+                before_year = match.group(4)  # Year before "and"
+                after_year = match.group(2)  # Year after "and"
+                before_month = match.group(3)  # Month before "and"
+                after_month = match.group(1)  # Month after "and"
+                
+                beforeMonthNumeric = getNumericMonth(before_month, monthMapping)
+                afterMonthNumeric = getNumericMonth(after_month, monthMapping)
+                # Use the template for formatting
+                result_str = rule["template"] % (before_year, beforeMonthNumeric, after_year, afterMonthNumeric)
+                return result_str
+
+            elif rule_name == "range_with_and_year":
+                before_year = match.group(1)  # Year before "and"
+                after_year = match.group(2)  # Year after "and"
+                
+                # Use the template for formatting
+                result_str = rule["template"] % (before_year, after_year)
+                return result_str
+
+            elif rule_name == "before_month_year":
+                year = match.group(2) 
+                month = match.group(1) 
+                monthNumeric = getNumericMonth(month, monthMapping)
+                return f"[..{year}-{monthNumeric}]"
+
+            elif rule_name == "after_month_year":
+                year = match.group(2) 
+                month = match.group(1)
+                monthNumeric = getNumericMonth(month, monthMapping)
+                return f"[{year}-{monthNumeric}..]"
+
+            elif rule_name == "before_year":
+                year = match.group(1)
+                return f"[..{year}]"
+
+            elif rule_name == "roman_century":
+                roman_numeral = match.group(1)  # Capture the Roman numeral
+                century_str = roman_to_century(roman_numeral)
+                return century_str
+            else:
+                groups = match.groups()
+                result_str = rule["template"] % groups
+                return result_str
+            
+
+    return None
 
 
 # -----------------------------------------------------------------------------
@@ -317,6 +540,23 @@ def getNormalizedString(s):
   # remove double whitespaces using trick from stackoverflow.com/questions/8270092/remove-all-whitespace-in-a-string
   return " ".join(noDots.split())
   
+# -----------------------------------------------------------------------------
+def getNormalizedDateString(s):
+  """This function returns a normalized copy of the given string.
+
+  >>> getNormalizedDateString("HeLlO")
+  'hello'
+  >>> getNormalizedDateString("judaïsme, islam, christianisme, ET sectes apparentées")
+  'judaisme, islam, christianisme, et sectes apparentees'
+  >>> getNormalizedDateString("chamanisme, de l’Antiquité…)")
+  'chamanisme, de lantiquite...)'
+
+  """
+  # by the way: only after asci normalization the UTF character for ... becomes ...
+  asciiNormalized = ud.normalize('NFKD', s).encode('ASCII', 'ignore').lower().strip().decode("utf-8")
+
+  return asciiNormalized
+ 
   
 # -----------------------------------------------------------------------------
 def passFilter(elem, filterConfig):
@@ -403,39 +643,73 @@ def passFilter(elem, filterConfig):
 
   
 # -----------------------------------------------------------------------------
-def extractFieldValue(value, valueType, columnData, recordID, config):
+def extractFieldValue(value, valueType, recordID, config, dateConfig, monthMapping):
 
-  datePatterns = config['datePatterns']
   vNorm = None
   if value:
     # parse different value types, for example dates or regular strings
     #
+    value = value.strip()
+
     if valueType == 'date':
-      try:
-        vNorm = parseDate(value, datePatterns)
-        columnData.append(vNorm)
-      except Exception as e:
-        logging.warning(f'record {recordID}: {e}')
+      vNorm = handleTypeDate(recordID, value, dateConfig, monthMapping)
+
     elif valueType == 'text':
-      columnData.append(value)
+      vNorm = value
+
     elif valueType == 'isniURL':
-      isniComponents = value.split('isni.org/isni/')
-      if len(isniComponents) > 1:
-        vNorm = isniComponents[1]
-        columnData.append(vNorm)
-      else:
-        logger.warning(f'record {recordID}: malformed ISNI URL "{value}"')
+      vNorm = handleTypeISNIURL(recordID, value)
+
     elif valueType == 'bnfURL':
-      bnfComponents = value.split('ark:/12148/')
-      if len(bnfComponents) > 1:
-        vNorm = bnfComponents[1]
-        columnData.append(vNorm)
-      else:
-        logging.warning(f'record {recordID}: malformed BnF URL "{value}"')
-    
+      vNorm = handleTypeBnFURL(recordID, value)
+
     else:
       logging.error(f'Unknown value type in config "{valueType}", should be "date", "text", "isniURL", or "bnfURL"')
 
+  return vNorm
+
+# -----------------------------------------------------------------------------
+def handleTypeDate(recordID, value, dateConfig, monthMapping):
+
+  datePatterns = dateConfig['datePatterns']
+
+  vNorm = None
+  try:
+    vNorm = parseDate(value, datePatterns)
+  except Exception as e:
+    if not value.replace('-','') == '': 
+      vNorm = parseComplexDate(value, dateConfig, monthMapping)
+      if not vNorm:
+        logging.warning(f'{recordID}: no match with parseDate or parseComplexDate for {value}')
+  return vNorm
+
+# -----------------------------------------------------------------------------
+def handleTypeISNIURL(recordID, value):
+
+  vNorm = None
+  isniComponents = value.split('isni.org/isni/')
+  if len(isniComponents) > 1:
+    vNorm = isniComponents[1]
+  else:
+    logger.warning(f'record {recordID}: malformed ISNI URL "{value}"')
+
+  return vNorm
+
+# -----------------------------------------------------------------------------
+def handleTypeBnFURL(recordID, value):
+
+  vNorm = None
+  bnfComponents = value.split('ark:/12148/')
+  if len(bnfComponents) > 1:
+    vNorm = bnfComponents[1]
+  else:
+    logging.warning(f'record {recordID}: malformed BnF URL "{value}"')
+
+  return vNorm
+
+# -----------------------------------------------------------------------------
+def getOriginalColumnName(columnConfig):
+  return columnConfig["columnName"] + "-original"
 
 # -----------------------------------------------------------------------------
 def create1NOutputWriters(config, outputFolder, prefix):
@@ -448,7 +722,10 @@ def create1NOutputWriters(config, outputFolder, prefix):
     if field["valueType"] == 'json':
       allColumnNames = [config["recordIDColumnName"]] + [subfield["columnName"] for subfield in field["subfields"]]
     else:
-      allColumnNames = [config["recordIDColumnName"], columnName]
+      if "keepOriginal" in field and field["keepOriginal"] == "true":
+        allColumnNames = [config["recordIDColumnName"], columnName, getOriginalColumnName(field)]
+      else:
+        allColumnNames = [config["recordIDColumnName"], columnName]
     outputFilename = os.path.join(outputFolder, f'{prefix}-{columnName}.csv')
     outputWriters[field["columnName"]] = csv.DictWriter(open(outputFilename, 'w'), fieldnames=allColumnNames, delimiter=',') 
 

@@ -1,4 +1,6 @@
 import unittest
+import json
+import re
 import xml_to_csv.utils as utils
 from test.position_test_cases import PositionTestCases
 
@@ -26,11 +28,11 @@ class TestOnlyWantedRecords(PositionTestCases, unittest.TestCase):
   # ---------------------------------------------------------------------------
   @classmethod
   def setUpClass(cls):
-    cls.positionsChunk110 = utils.find_record_positions('test/resources/10-records.xml', 'record', chunk_size=110)
+    cls.positionsChunk110 = utils.find_record_positions('test/resources/10-records.xml', 'record', chunkSize=110)
 
-    cls.positionsChunk200 = utils.find_record_positions('test/resources/10-records.xml', 'record', chunk_size=200)
+    cls.positionsChunk200 = utils.find_record_positions('test/resources/10-records.xml', 'record', chunkSize=200)
 
-    cls.positionsChunk1500 = utils.find_record_positions('test/resources/10-records.xml', 'record', chunk_size=1500)
+    cls.positionsChunk1500 = utils.find_record_positions('test/resources/10-records.xml', 'record', chunkSize=1500)
 
 
 
@@ -56,11 +58,37 @@ class TestMixedCollectionRecords(PositionTestCases, unittest.TestCase):
   # ---------------------------------------------------------------------------
   @classmethod
   def setUpClass(cls):
-    cls.positionsChunk110 = utils.find_record_positions('test/resources/10-records-with-unrelated-records.xml', 'record', chunk_size=110)
+    cls.positionsChunk110 = utils.find_record_positions('test/resources/10-records-with-unrelated-records.xml', 'record', chunkSize=110)
 
-    cls.positionsChunk200 = utils.find_record_positions('test/resources/10-records-with-unrelated-records.xml', 'record', chunk_size=200)
+    cls.positionsChunk200 = utils.find_record_positions('test/resources/10-records-with-unrelated-records.xml', 'record', chunkSize=200)
 
-    cls.positionsChunk1500 = utils.find_record_positions('test/resources/10-records-with-unrelated-records.xml', 'record', chunk_size=1500)
+    cls.positionsChunk1500 = utils.find_record_positions('test/resources/10-records-with-unrelated-records.xml', 'record', chunkSize=1500)
 
+
+class TestDateParsing(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        # Load the config from JSON file
+        with open("date-mapping.json", "r") as file:
+            cls.config = json.load(file)
+
+    def test_compile_pattern(self):
+        # Test a specific pattern compilation
+        pattern_str = self.config["rules"]["before_month_year"]["pattern"]
+        compiled_pattern = utils.compile_pattern(pattern_str, self.config["components"])
+        
+        # Ensure that the pattern matches as expected
+        test_string = "before November 1980"
+        match = re.match(compiled_pattern, test_string)
+        self.assertIsNotNone(match)
+        self.assertEqual(match.group(0), test_string)
+
+    def test_parseComplexDate(self):
+        # Test complex date parsing
+        monthMapping = utils.buildMonthMapping(self.config)
+        result = utils.parseComplexDate("before November 1980 and after April 1978", self.config, monthMapping)
+        
+        # Check the result to match EDTF format expectation
+        self.assertEqual(result, "1978-04/1980-11")
 
 
