@@ -27,12 +27,12 @@
     {
       "columnName": "birthDate",
       "expression": "./marc:datafield[@tag=\"046\"]/marc:subfield[@code=\"f\"]",
-      "valueType": "text"
+      "valueType": "date"
     },
     {
       "columnName": "deathDate",
       "expression": "./marc:datafield[@tag=\"046\"]/marc:subfield[@code=\"g\"]",
-      "valueType": "text"
+      "valueType": "date"
       
     },
     {

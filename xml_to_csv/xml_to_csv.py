@@ -173,7 +173,7 @@ def getValueList(elem, config, configKey, dateConfig, monthMapping):
     # process all extracted data (possibly more than one value)
     #
     if values:
-      for v in values:
+      for v in values: 
 
         if 'valueType' in p:
           valueType = p['valueType']
@@ -205,8 +205,9 @@ def getValueList(elem, config, configKey, dateConfig, monthMapping):
                 subfieldTextValues = [s.text for s in subfieldValues]
                 allSubfieldsData[subfieldColumnName] = subfieldDelimiter.join(subfieldTextValues)
 
-              # the dictionary of subfield lists becomes the JSON value of this column
-              recordData[columnName] = allSubfieldsData
+              # add the current dictionary of subfield lists to the value of this column
+              # https://github.com/kbrbe/xml-to-csv/issues/13
+              recordData[columnName].append(allSubfieldsData)
             else:
               logging.error(f'JSON specified, but no subfields given')
           else:
@@ -218,7 +219,10 @@ def getValueList(elem, config, configKey, dateConfig, monthMapping):
               originalColumnName = utils.getOriginalColumnName(p)
               recordData[columnName].append({columnName: parsedValue, originalColumnName: v.text})
             else:
-              recordData[columnName].append({columnName: parsedValue})
+              # check if we did not already add the exact same name already (https://github.com/kbrbe/xml-to-csv/issues/14)
+              existingValues = [colDict[columnName] for colDict in recordData[columnName]]
+              if parsedValue not in existingValues:
+                recordData[columnName].append({columnName: parsedValue})
 
         else:
           logging.error(f'No valueType given!')
@@ -256,7 +260,6 @@ def processRecord(elem, config, dateConfig, monthMapping, outputWriter, files, p
   recordData = getValueList(elem, config, "dataFields", dateConfig, monthMapping)
 
   identifierPrefix = config["recordIDPrefix"] if "recordIDPrefix" in config else ''
-  recordData[config["recordIDColumnName"]] = identifierPrefix + recordData[config["recordIDColumnName"]]
 
   # (1) write output to the general CSV file
   outputRow = {config["recordIDColumnName"]: identifierPrefix + recordData[config["recordIDColumnName"]]}
@@ -264,15 +267,24 @@ def processRecord(elem, config, dateConfig, monthMapping, outputWriter, files, p
     if columnName != config["recordIDColumnName"]:
       outputRow[columnName] = []
       if extractedValues:
+        # there are one or more results for this column
         for valueDict in extractedValues:
-          for valueColumnName, singleValue in valueDict.items():
-            if valueColumnName in outputRow:
-              outputRow[valueColumnName].append(singleValue)
-            else:
-              outputRow[valueColumnName] = [singleValue]
+          if columnName in valueDict:
+            # the result contains a subfield with the same name as the column
+            # i.e. not type json, but a regular column with possible original
+            for valueColumnName, singleValue in valueDict.items():
+              singleValue = singleValue if singleValue else ''
+              if valueColumnName in outputRow:
+                outputRow[valueColumnName].append(singleValue)
+              else:
+                outputRow[valueColumnName] = [singleValue]
+
+          else:
+            # the result contains subfields (i.e. type json), write as-is
+            outputRow[columnName].append(valueDict)
       else:
         outputRow[columnName] = ''
-  outputWriter.writerow(recordData)
+  outputWriter.writerow(outputRow)
 
   # (2) Create a CSV output file for each selected columns to resolve 1:n relationships
   if prefix != "":
