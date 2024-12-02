@@ -212,17 +212,32 @@ def getValueList(elem, config, configKey, dateConfig, monthMapping):
               logging.error(f'JSON specified, but no subfields given')
           else:
             # other value types require to analyze the text content
-            parsedValue = utils.extractFieldValue(v.text, valueType, recordID, config, dateConfig, monthMapping)
+            parsedValue = utils.extractFieldValue(v.text, valueType, recordID, config, dateConfig, monthMapping, columnName)
 
             # add original value for current data field if necessary
             if "keepOriginal" in p and p["keepOriginal"] == "true":
               originalColumnName = utils.getOriginalColumnName(p)
-              recordData[columnName].append({columnName: parsedValue, originalColumnName: v.text})
+
+              # bad practice: different types of return values
+              # temporarily solution to additionally get parsing rule for dates
+              if isinstance(parsedValue, dict):               
+                dictToAppend = parsedValue
+                dictToAppend.update({originalColumnName: v.text})
+                recordData[columnName].append(dictToAppend)
+              else:
+                recordData[columnName].append({columnName: parsedValue, originalColumnName: v.text})
             else:
               # check if we did not already add the exact same name already (https://github.com/kbrbe/xml-to-csv/issues/14)
+              # no keepOriginal check, because we don't expect this for names (possible bad practice to fix?)
               existingValues = [colDict[columnName] for colDict in recordData[columnName]]
               if parsedValue not in existingValues:
-                recordData[columnName].append({columnName: parsedValue})
+                # bad practice: different types of return values
+                # temporarily solution to additionally get parsing rule for dates
+                if isinstance(parsedValue, dict):               
+                  dictToAppend = parsedValue
+                  recordData[columnName].append(dictToAppend)
+                else:
+                  recordData[columnName].append({columnName: parsedValue})
 
         else:
           logging.error(f'No valueType given!')
@@ -269,7 +284,7 @@ def processRecord(elem, config, dateConfig, monthMapping, outputWriter, files, p
       if extractedValues:
         # there are one or more results for this column
         for valueDict in extractedValues:
-          if columnName in valueDict:
+          if columnName in valueDict and 'rule' not in valueDict:
             # the result contains a subfield with the same name as the column
             # i.e. not type json, but a regular column with possible original
             for valueColumnName, singleValue in valueDict.items():

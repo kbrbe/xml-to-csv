@@ -383,7 +383,7 @@ def parseComplexDate(input_str, config, monthMapping):
     >>> parseComplexDate("before November 1980 and after April 1978", config, {"november": "11", "april": "04"})
     '1978-04/1980-11'
     """
-    # Normalize input (optional, depending on your needs)
+    # Normalize input
     norm_input = getNormalizedDateString(input_str)
 
     results = []
@@ -408,7 +408,7 @@ def parseComplexDate(input_str, config, monthMapping):
                 afterMonthNumeric = getNumericMonth(after_month, monthMapping)
                 # Use the template for formatting
                 result_str = rule["template"] % (before_year, beforeMonthNumeric, after_year, afterMonthNumeric)
-                return result_str
+                return result_str, rule_name
 
             elif rule_name == "range_with_and_year":
                 before_year = match.group(1)  # Year before "and"
@@ -416,35 +416,35 @@ def parseComplexDate(input_str, config, monthMapping):
                 
                 # Use the template for formatting
                 result_str = rule["template"] % (before_year, after_year)
-                return result_str
+                return result_str, rule_name
 
             elif rule_name == "before_month_year":
                 year = match.group(2) 
                 month = match.group(1) 
                 monthNumeric = getNumericMonth(month, monthMapping)
-                return f"[..{year}-{monthNumeric}]"
+                return f"[..{year}-{monthNumeric}]", rule_name
 
             elif rule_name == "after_month_year":
                 year = match.group(2) 
                 month = match.group(1)
                 monthNumeric = getNumericMonth(month, monthMapping)
-                return f"[{year}-{monthNumeric}..]"
+                return f"[{year}-{monthNumeric}..]", rule_name
 
             elif rule_name == "before_year":
                 year = match.group(1)
-                return f"[..{year}]"
+                return f"[..{year}]", rule_name
 
             elif rule_name == "roman_century":
                 roman_numeral = match.group(1)  # Capture the Roman numeral
                 century_str = roman_to_century(roman_numeral)
-                return century_str
+                return century_str, rule_name
             else:
                 groups = match.groups()
                 result_str = rule["template"] % groups
-                return result_str
+                return result_str, rule_name
             
 
-    return None
+    return None, None
 
 
 # -----------------------------------------------------------------------------
@@ -643,7 +643,7 @@ def passFilter(elem, filterConfig):
 
   
 # -----------------------------------------------------------------------------
-def extractFieldValue(value, valueType, recordID, config, dateConfig, monthMapping):
+def extractFieldValue(value, valueType, recordID, config, dateConfig, monthMapping, columnName):
 
   vNorm = None
   if value:
@@ -652,7 +652,8 @@ def extractFieldValue(value, valueType, recordID, config, dateConfig, monthMappi
     value = value.strip()
 
     if valueType == 'date':
-      vNorm = handleTypeDate(recordID, value, dateConfig, monthMapping)
+      parsedDate, parsingRule = handleTypeDate(recordID, value, dateConfig, monthMapping)
+      vNorm = {columnName: parsedDate, "rule": parsingRule}
 
     elif valueType == 'text':
       vNorm = value
@@ -674,14 +675,16 @@ def handleTypeDate(recordID, value, dateConfig, monthMapping):
   datePatterns = dateConfig['datePatterns']
 
   vNorm = None
+  rule = 'placeholder_value'
   try:
     vNorm = parseDate(value, datePatterns)
+    rule = 'simplePattern'
   except Exception as e:
     if not value.replace('-','') == '': 
-      vNorm = parseComplexDate(value, dateConfig, monthMapping)
+      vNorm, rule  = parseComplexDate(value, dateConfig, monthMapping)
       if not vNorm:
         logging.warning(f'{recordID}: no match with parseDate or parseComplexDate for {value}')
-  return vNorm
+  return vNorm, rule
 
 # -----------------------------------------------------------------------------
 def handleTypeISNIURL(recordID, value):
@@ -722,10 +725,11 @@ def create1NOutputWriters(config, outputFolder, prefix):
     if field["valueType"] == 'json':
       allColumnNames = [config["recordIDColumnName"]] + [subfield["columnName"] for subfield in field["subfields"]]
     else:
+      allColumnNames = [config["recordIDColumnName"], columnName]
       if "keepOriginal" in field and field["keepOriginal"] == "true":
-        allColumnNames = [config["recordIDColumnName"], columnName, getOriginalColumnName(field)]
-      else:
-        allColumnNames = [config["recordIDColumnName"], columnName]
+        allColumnNames.append(getOriginalColumnName(field))
+      if field["valueType"] == 'date':
+        allColumnNames.append('rule')
     outputFilename = os.path.join(outputFolder, f'{prefix}-{columnName}.csv')
     outputWriters[field["columnName"]] = csv.DictWriter(open(outputFilename, 'w'), fieldnames=allColumnNames, delimiter=',') 
 
