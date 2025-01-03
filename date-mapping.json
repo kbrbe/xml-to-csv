@@ -1,0 +1,83 @@
+{
+    "datePatterns": ["%Y", "(%Y)", "[%Y]", "%Y-%m-%d", "%Y--%m-%d", "%Y--%m--%d", "%d/%m/%Y", "%Y/%m/%d", "%Y%m%d", "%Y----", "%Y.%m.%d", "%d.%m.%Y"],
+    "components": {
+        "months": {
+            "English": {
+                "January": "01", "February": "02", "March": "03", "April": "04",
+                "May": "05", "June": "06", "July": "07", "August": "08",
+                "September": "09", "October": "10", "November": "11", "December": "12"
+            },
+            "French": {
+                "Janvier": "01", "Février": "02", "Mars": "03", "Avril": "04",
+                "Mai": "05", "Juin": "06", "Juillet": "07", "Août": "08",
+                "Septembre": "09", "Octobre": "10", "Novembre": "11", "Décembre": "12"
+            },
+            "German": {
+                "Januar": "01", "Februar": "02", "März": "03", "April": "04",
+                "Mai": "05", "Juni": "06", "Juli": "07", "August": "08",
+                "September": "09", "Oktober": "10", "November": "11", "Dezember": "12"
+            }
+        },
+        "keywords": {
+            "before": "\\b(?:before|avant|Avant)\\b",
+            "after": "\\b(?:after|après|Après)\\b",
+            "and": "\\b(?:and|et|Et)\\b",
+            "or": "\\b(?:or|ou)\\b"
+        },
+        "year": "(\\d{4})",
+        "century": "([1-9]|1[0-9]|20|21)",
+        "month": "(\\d{2})",
+        "roman_numeral": "(X{0,3}|IX|V?I{0,3})"
+    },
+    "rules": {
+        "range_with_and_month": {
+            "pattern": "%(keywords.before)s\\s+(%(months.generic)s)\\s+%(year)s\\s+%(keywords.and)s\\s+%(keywords.after)s\\s+(%(months.generic)s)\\s+%(year)s",
+            "template": "%s-%s/%s-%s"
+        },
+        "range_with_and_year": {
+            "pattern": "%(keywords.before)s\\s+%(year)s\\s+%(keywords.and)s\\s+%(keywords.after)s\\s+%(year)s",
+            "template": "[%s/%s]"
+        },
+        "before_month_year": {
+            "pattern": "%(keywords.before)s\\s+(%(months.generic)s)\\s+%(year)s",
+            "template": "[..%s-%s]"
+        },
+        "after_month_year": {
+            "pattern": "%(keywords.after)s\\s+(%(months.generic)s)\\s+%(year)s",
+            "template": "[%s-%s..]"
+        },
+        "before_year": {
+            "pattern": "%(keywords.before)s\\s+%(year)s",
+            "template": "[..%s]"
+        },
+        "after_year": {
+            "pattern": "%(keywords.after)s\\s+%(year)s",
+            "template": "[%s..]"
+        },
+        "year_month": {
+            "pattern": "%(year)s-%(month)s(?:-XX)?(?!-\\d)",
+            "template": "%s-%s"
+        },
+        "year_or_brackets": {
+            "pattern": "%(year)s\\s+\\(%(keywords.or)s\\s+-%(year)s\\)",
+            "template": "[%s,%s]"
+        },
+        "uncertain_year": {
+            "pattern": "^%(year)s\\?",
+            "template": "%s"
+        },
+        "year_and_text": {
+            "pattern": "(\\d{4})(?:,|\\s)*(?:\\b\\w+\\b\\s*)*",
+            "template": "%s"
+        },
+        "century": {
+            "pattern": "^%(century)s(?:X|-)?(?!\\d)",
+            "template": "%sXX"
+        },
+        "roman_century": {
+            "pattern": "^%(roman_numeral)s(?:e|e|ème|e siècle)",
+            "template": "%s~"
+        }
+    }
+}
+
