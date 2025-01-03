@@ -306,7 +306,7 @@ def compile_pattern(pattern, components):
             month_patterns = []
             for language, months in components['months'].items():
                 month_patterns.extend(months.keys())
-            month_names = '|'.join(re.escape(month) for month in month_patterns)
+            month_names = '|'.join(re.escape(getNormalizedDateString(month)) for month in month_patterns)
             component_map[ph] = rf"\b{month_names}"
         else:
             keys = ph.split('.')
@@ -398,7 +398,7 @@ def parseComplexDate(input_str, config, monthMapping):
             #print(f'rule "{rule_name}" match with pattern "{pattern_str}" for input string "{norm_input}". Groups are {match.groups()}')
 
             # Check for more specific rules first
-            if rule_name == "range_with_and_month":
+            if rule_name == "range_with_and_written_month":
                 before_year = match.group(4)  # Year before "and"
                 after_year = match.group(2)  # Year after "and"
                 before_month = match.group(3)  # Month before "and"
@@ -418,13 +418,31 @@ def parseComplexDate(input_str, config, monthMapping):
                 result_str = rule["template"] % (before_year, after_year)
                 return result_str, rule_name
 
-            elif rule_name == "before_month_year":
+            elif rule_name == "before_written_month_year":
                 year = match.group(2) 
                 month = match.group(1) 
                 monthNumeric = getNumericMonth(month, monthMapping)
                 return f"[..{year}-{monthNumeric}]", rule_name
 
-            elif rule_name == "after_month_year":
+            elif rule_name == "before_dash_date":
+                year = match.group(3) 
+                month = match.group(2) 
+                day = match.group(1)
+                return f"[..{year}-{month}-{day}]", rule_name
+
+            elif rule_name == "years_slash_abbreviation":
+                year = match.group(1) 
+                alternateYearAbbreviation = match.group(2) 
+                otherYear = year[:-len(alternateYearAbbreviation)] + alternateYearAbbreviation
+                return f"[{year},{otherYear}]", rule_name
+
+            elif rule_name == "written_month_year":
+                year = match.group(2) 
+                month = match.group(1) 
+                monthNumeric = getNumericMonth(month, monthMapping)
+                return f"{year}-{monthNumeric}", rule_name
+
+            elif rule_name == "after_written_month_year":
                 year = match.group(2) 
                 month = match.group(1)
                 monthNumeric = getNumericMonth(month, monthMapping)

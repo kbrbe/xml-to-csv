@@ -144,7 +144,17 @@ def setupLogging(logLevel, logFile):
 
 # -----------------------------------------------------------------------------
 def getValueList(elem, config, configKey, dateConfig, monthMapping):
-  """This function extracts all values from the XML element elem according to the config"""
+  """This function extracts all values from the XML element elem according to the config
+  Example output: {'isni': '', 'bnf': '', 'name': [{'name': 'Hayashi Motoharu'}], 'birthDate': [{'birthDate': '1858', 'rule': 'simplePattern'}], 'deathDate': [{'deathDate': None}], 'birthPlace': [{'birthTown': 'Osaka', 'birthCountry': 'Japon'}], 'deathPlace': '', 'autID': '6840'}
+
+  * One dictionary key per "column" of the config.
+  * empty strings for empty text values
+  * subkeys for type date
+  * date subkey with same name as parent key, but additional rule
+  * date can have only one subkey which is none
+  * in this example subkeys for places, because it is of type json
+
+  """
 
   keyParts = []
 
@@ -185,6 +195,7 @@ def getValueList(elem, config, configKey, dateConfig, monthMapping):
 
               # collect subfield data in a dictionary
               #
+              atLeastOneValue = False
               for subfieldConfig in subfieldConfigEntries:
                 subfieldColumnName = subfieldConfig['columnName']
                 subfieldExpression = subfieldConfig['expression']
@@ -202,12 +213,16 @@ def getValueList(elem, config, configKey, dateConfig, monthMapping):
                 subfieldDelimiter = ';'
                 if len(subfieldValues) > 1:
                   logging.warning(f'multiple values for subfield {subfieldColumnName} in record {recordID} (concatenated with {subfieldDelimiter})')
-                subfieldTextValues = [s.text for s in subfieldValues]
+                subfieldTextValues = [s.text for s in subfieldValues if s.text is not None]
+          
+                if subfieldTextValues:
+                  atLeastOneValue = True
                 allSubfieldsData[subfieldColumnName] = subfieldDelimiter.join(subfieldTextValues)
-
-              # add the current dictionary of subfield lists to the value of this column
-              # https://github.com/kbrbe/xml-to-csv/issues/13
-              recordData[columnName].append(allSubfieldsData)
+         
+              if atLeastOneValue:
+                # add the current dictionary of subfield lists to the value of this column
+                # https://github.com/kbrbe/xml-to-csv/issues/13
+                recordData[columnName].append(allSubfieldsData)
             else:
               logging.error(f'JSON specified, but no subfields given')
           else:
@@ -309,20 +324,23 @@ def processRecord(elem, config, dateConfig, monthMapping, outputWriter, files, p
 
       if valueList and columnName != config["recordIDColumnName"]:
 
-        if isinstance(valueList, list):
-          # simple 1:n relationship: one row per value
-          # but it is one dictionary per relationship, 
-          # because we eventually have the parsed value and the original value
-          for v in valueList:
+        # simple 1:n relationship: one row per value
+        # but it is one dictionary per relationship, 
+        # because we eventually have the parsed value and the original value
+        for v in valueList:
+          # skip if none, e.g. if {"birthDate": {"birthDate": None} }
+          if any(v.values()):
             outputRow = v
             outputRow.update({config["recordIDColumnName"]: recordID})
             files[columnName].writerow(outputRow)
 
-        elif isinstance(valueList, dict):
-          # complex 1:n relationship: one row per value, but subfields require multiple columns
-          # this data comes from valueType JSON
-          valueList.update({config["recordIDColumnName"]: recordID})
-          files[columnName].writerow(valueList)
+        #if isinstance(valueList, list):
+        #  pass
+        #elif isinstance(valueList, dict):
+        #  # complex 1:n relationship: one row per value, but subfields require multiple columns
+        #  # this data comes from valueType JSON
+        #  valueList.update({config["recordIDColumnName"]: recordID})
+        #  files[columnName].writerow(valueList)
           
 
 # -----------------------------------------------------------------------------
