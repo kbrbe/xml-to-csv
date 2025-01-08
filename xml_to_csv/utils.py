@@ -9,13 +9,15 @@ import enchant
 import csv
 import os
 import re
+import xml_to_csv.csv_logger as csv_logger
 from stdnum import isbn
 from stdnum import exceptions
 
 NS_MARCSLIM = 'http://www.loc.gov/MARC21/slim'
 ALL_NS = {'marc': NS_MARCSLIM}
 
-logger = logging.getLogger(__name__)
+LOGGER_NAME = "XML_TO_CSV.utils"
+logger = logging.getLogger(LOGGER_NAME)
 
 # -----------------------------------------------------------------------------
 def updateProgressBar(pbar, config, updateFrequency):
@@ -97,7 +99,7 @@ def fast_iter_batch(inputFilename, positions, func, tagName, pbar, config, dateC
       bytesStream.close()
       gc.collect()
     except Exception as e:
-      logging.error(f'error for tuple ({start},{end})')
+      logger.error(f'batch processing error for tuple ({start},{end})')
       sys.exit(0)
 
     # update the remaining count after the loop has ended
@@ -683,7 +685,7 @@ def extractFieldValue(value, valueType, recordID, config, dateConfig, monthMappi
       vNorm = handleTypeBnFURL(recordID, value)
 
     else:
-      logging.error(f'Unknown value type in config "{valueType}", should be "date", "text", "isniURL", or "bnfURL"')
+      logger.error(f'Unknown value type in config "{valueType}", should be "date", "text", "isniURL", or "bnfURL"', extra={'message_type': csv_logger.MESSAGE_TYPES['SCRIPT_ERROR']})
 
   return vNorm
 
@@ -701,7 +703,7 @@ def handleTypeDate(recordID, value, dateConfig, monthMapping):
     if not value.replace('-','') == '': 
       vNorm, rule  = parseComplexDate(value, dateConfig, monthMapping)
       if not vNorm:
-        logging.warning(f'{recordID}: no match with parseDate or parseComplexDate for {value}')
+        logger.warning(f'{recordID}: no match with parseDate or parseComplexDate for {value}', extra={'identifier': recordID, 'message_type': csv_logger.MESSAGE_TYPES['INVALID_VALUE']})
   return vNorm, rule
 
 # -----------------------------------------------------------------------------
@@ -712,7 +714,7 @@ def handleTypeISNIURL(recordID, value):
   if len(isniComponents) > 1:
     vNorm = isniComponents[1]
   else:
-    logger.warning(f'record {recordID}: malformed ISNI URL "{value}"')
+    logger.warning(f'record {recordID}: malformed ISNI URL "{value}"', extra={'identifier': recordID, 'message_type': csv_logger.MESSAGE_TYPES['INVALID_VALUE']})
 
   return vNorm
 
@@ -724,7 +726,7 @@ def handleTypeBnFURL(recordID, value):
   if len(bnfComponents) > 1:
     vNorm = bnfComponents[1]
   else:
-    logging.warning(f'record {recordID}: malformed BnF URL "{value}"')
+    logger.warning(f'record {recordID}: malformed BnF URL "{value}"', extra={'identifier': recordID, 'message_type': csv_logger.MESSAGE_TYPES['INVALID_VALUE']})
 
   return vNorm
 

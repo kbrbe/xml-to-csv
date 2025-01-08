@@ -12,6 +12,8 @@ import enchant
 import hashlib
 import csv
 import re
+import xml_to_csv.csv_logger as csv_logger
+from xml_to_csv.csv_logger import CSVFileHandler
 from contextlib import ExitStack
 from argparse import ArgumentParser
 from tqdm import tqdm
@@ -21,6 +23,8 @@ import stdnum
 NS_MARCSLIM = 'http://www.loc.gov/MARC21/slim'
 ALL_NS = {'marc': NS_MARCSLIM}
 
+LOGGER_NAME = "XML_TO_CSV.utils"
+logger = logging.getLogger(LOGGER_NAME)
 
 # -----------------------------------------------------------------------------
 def main(inputFilenames, outputFilename, configFilename, dateConfigFilename, prefix, incrementalProcessing, logLevel='INFO', logFile=None):
@@ -105,7 +109,7 @@ def main(inputFilenames, outputFilename, configFilename, dateConfigFilename, pre
           config['counters']['fileCounter'] += 1
 
           if incrementalProcessing:
-            logging.info(f'incremental processing ...')
+            logger.info(f'incremental processing ...')
 
             # use record tag string, because for finding the positions there is no explicit namespace
             # later for record parsing we should use the namespace-agnostic name
@@ -116,7 +120,7 @@ def main(inputFilenames, outputFilename, configFilename, dateConfigFilename, pre
             utils.fast_iter_batch(inputFilename, positions, processRecord, recordTag, pbar, config, dateConfig, monthMapping, updateFrequency, batchSize, outputWriter, files, prefix)
 
           else:
-            logging.info(f'regular iterative processing ...')
+            logger.info(f'regular iterative processing ...')
 
             context = ET.iterparse(inputFilename, tag=recordTag)
             utils.fast_iter(
@@ -138,9 +142,13 @@ def setupLogging(logLevel, logFile):
 
   logFormat = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
   if logFile:
-    logging.basicConfig(level=logLevel, format=logFormat, filename=logFile, filemode='w')
+    logger = logging.getLogger(LOGGER_NAME)
+    # Debug: Print current handlers
+    csvHandler = CSVFileHandler(logFile, logLevel=logLevel, delimiter=',', filemode='w')
+    logger.addHandler(csvHandler)
   else:
     logging.basicConfig(level=logLevel, format=logFormat)
+    logger = logging.getLogger(LOGGER_NAME)
 
 # -----------------------------------------------------------------------------
 def getValueList(elem, config, configKey, dateConfig, monthMapping):
@@ -161,7 +169,7 @@ def getValueList(elem, config, configKey, dateConfig, monthMapping):
   # first check if we can extract the data we should extract
   #
   if configKey not in config:
-    logging.error(f'No key "{configKey}" in config!')
+    logger.error(f'No key "{configKey}" in config!', extra={'message_type': csv_logger.MESSAGE_TYPES['CONFIG_ERROR']})
     return None
 
   recordID = utils.getElementValue(elem.find(config['recordIDExpression'], ALL_NS))
@@ -203,7 +211,7 @@ def getValueList(elem, config, configKey, dateConfig, monthMapping):
 
                 # we are not doing recursive calls here
                 if subfieldValueType == 'json':
-                  logging.error(f'type "json" not allowed for subfields')
+                  logger.error(f'type "json" not allowed for subfields', extra={'message_type': csv_logger.MESSAGE_TYPES['CONFIG_ERROR']})
                   continue
                 subfieldValues = v.xpath(subfieldExpression, namespaces=ALL_NS)
 
@@ -212,7 +220,7 @@ def getValueList(elem, config, configKey, dateConfig, monthMapping):
                 #
                 subfieldDelimiter = ';'
                 if len(subfieldValues) > 1:
-                  logging.warning(f'multiple values for subfield {subfieldColumnName} in record {recordID} (concatenated with {subfieldDelimiter})')
+                  logger.warning(f'multiple values for subfield {subfieldColumnName} in record {recordID} (concatenated with {subfieldDelimiter})', extra={'message_type': csv_logger.MESSAGE_TYPES['CONFIG_ERROR']})
                 subfieldTextValues = [s.text for s in subfieldValues if s.text is not None]
           
                 if subfieldTextValues:
@@ -224,7 +232,7 @@ def getValueList(elem, config, configKey, dateConfig, monthMapping):
                 # https://github.com/kbrbe/xml-to-csv/issues/13
                 recordData[columnName].append(allSubfieldsData)
             else:
-              logging.error(f'JSON specified, but no subfields given')
+              logger.error(f'JSON specified, but no subfields given', extra={'message_type': csv_logger.MESSAGE_TYPES['CONFIG_ERROR']})
           else:
             # other value types require to analyze the text content
             parsedValue = utils.extractFieldValue(v.text, valueType, recordID, config, dateConfig, monthMapping, columnName)
@@ -255,7 +263,7 @@ def getValueList(elem, config, configKey, dateConfig, monthMapping):
                   recordData[columnName].append({columnName: parsedValue})
 
         else:
-          logging.error(f'No valueType given!')
+          logger.error(f'No valueType given!', extra={'message_type': csv_logger.MESSAGE_TYPES['CONFIG_ERROR']})
     
   recordData = {k:"" if not v else v for k,v in recordData.items()}
   return recordData
