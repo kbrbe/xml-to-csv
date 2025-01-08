@@ -235,6 +235,7 @@ def getValueList(elem, config, configKey, dateConfig, monthMapping):
               logger.error(f'JSON specified, but no subfields given', extra={'message_type': csv_logger.MESSAGE_TYPES['CONFIG_ERROR']})
           else:
             # other value types require to analyze the text content
+            # parsedValue could be None, this should handled appropriately
             parsedValue = utils.extractFieldValue(v.text, valueType, recordID, config, dateConfig, monthMapping, columnName)
 
             # add original value for current data field if necessary
@@ -247,7 +248,8 @@ def getValueList(elem, config, configKey, dateConfig, monthMapping):
                 dictToAppend = parsedValue
                 dictToAppend.update({originalColumnName: v.text})
                 recordData[columnName].append(dictToAppend)
-              else:
+              elif parsedValue is not None:
+                # elif instead of else to avoid processing parsedValues that are None
                 recordData[columnName].append({columnName: parsedValue, originalColumnName: v.text})
             else:
               # check if we did not already add the exact same name already (https://github.com/kbrbe/xml-to-csv/issues/14)

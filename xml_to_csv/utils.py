@@ -673,7 +673,11 @@ def extractFieldValue(value, valueType, recordID, config, dateConfig, monthMappi
 
     if valueType == 'date':
       parsedDate, parsingRule = handleTypeDate(recordID, value, dateConfig, monthMapping)
-      vNorm = {columnName: parsedDate, "rule": parsingRule}
+      # only add dates to the output that were parsed by any rule, otherwise they are part of the log
+      # the handleTypeDate function will log it
+      # vNorm will stay None and the calling function should handle it properly
+      if parsedDate is not None:
+        vNorm = {columnName: parsedDate, "rule": parsingRule}
 
     elif valueType == 'text':
       vNorm = value
@@ -700,10 +704,15 @@ def handleTypeDate(recordID, value, dateConfig, monthMapping):
     vNorm = parseDate(value, datePatterns)
     rule = 'simplePattern'
   except Exception as e:
+    # if the following is not true we simply go to the return statement that will have the default rule 'placeholder_value'
+    if value.replace('-','') == '': 
+      logger.warning(f'{recordID}: placeholder value "{value}" found instead of real data', extra={'identifier': recordID, 'message_type': csv_logger.MESSAGE_TYPES['INVALID_VALUE']})
     if not value.replace('-','') == '': 
       vNorm, rule  = parseComplexDate(value, dateConfig, monthMapping)
+      # log a warning, but also ensure that the value will not become part of the output
       if not vNorm:
-        logger.warning(f'{recordID}: no match with parseDate or parseComplexDate for {value}', extra={'identifier': recordID, 'message_type': csv_logger.MESSAGE_TYPES['INVALID_VALUE']})
+        logger.error(f'{recordID}: no match with parseDate or parseComplexDate for {value}', extra={'identifier': recordID, 'message_type': csv_logger.MESSAGE_TYPES['INVALID_VALUE']})
+        
   return vNorm, rule
 
 # -----------------------------------------------------------------------------
