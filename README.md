@@ -21,10 +21,12 @@ Afterwards the script can be executed via the commandline:
 
 ```bash
 python -m xml_to_csv.xml_to_csv \
-  -i my-input.xml \
   -c config-example.json \
+  -d date-mapping.json \
   -p "my-data" \
-  -o "my-data.csv"
+  -o "my-data.csv" \
+  -l "my-data.log" \
+  "my-input.xml"
 ```
 
 For the config example the following files will be created
@@ -39,6 +41,16 @@ For the config example the following files will be created
 
 The file `my-date.csv` is the general output file in which every column besides the identifier column is an array containing possible 1:n relationships.
 The other files contain 1:n relationships between each record and the values of a single column of the output.
+
+### LICENSE
+
+This script makes use of the following other software libraries.
+
+| Library | Description | License |
+|---------|-------------|---------|
+| lxml | A library used to iterate fast (in a streaming fashion) over the input XML files | BSD |
+| tqdm | A library to provide a user-friendly progress bar, used to show the progress of file extraction. | [MIT](https://opensource.org/licenses/MIT) |
+
 
 ## Contact
 

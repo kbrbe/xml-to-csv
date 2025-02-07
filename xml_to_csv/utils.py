@@ -5,13 +5,10 @@ import lxml.etree as ET
 import unicodedata as ud
 import logging
 from io import BytesIO
-import enchant
 import csv
 import os
 import re
 import xml_to_csv.csv_logger as csv_logger
-from stdnum import isbn
-from stdnum import exceptions
 
 NS_MARCSLIM = 'http://www.loc.gov/MARC21/slim'
 ALL_NS = {'marc': NS_MARCSLIM}

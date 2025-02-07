@@ -8,7 +8,6 @@ import sys
 import json
 import itertools
 import logging
-import enchant
 import hashlib
 import csv
 import re
@@ -18,7 +17,6 @@ from contextlib import ExitStack
 from argparse import ArgumentParser
 from tqdm import tqdm
 import xml_to_csv.utils as utils
-import stdnum
 
 NS_MARCSLIM = 'http://www.loc.gov/MARC21/slim'
 ALL_NS = {'marc': NS_MARCSLIM}
