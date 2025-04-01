@@ -5,6 +5,7 @@ A Python script to extract XML fields to columns in CSV file(s). The script work
 ## Usage via the commandline
 
 Create and activate a Python virtual environment
+
 ```bash
 
 # Create a new Python virtual environment
