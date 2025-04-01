@@ -339,7 +339,7 @@ def processRecord(elem, config, dateConfig, monthMapping, outputWriter, files, p
           # skip if none, e.g. if {"birthDate": {"birthDate": None} }
           if any(v.values()):
             outputRow = v
-            outputRow.update({config["recordIDColumnName"]: recordID})
+            outputRow.update({config["recordIDColumnName"]: identifierPrefix + recordID})
             files[columnName].writerow(outputRow)
 
         #if isinstance(valueList, list):
