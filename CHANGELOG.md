@@ -24,3 +24,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial version of the script which we use internally at KBR and at the MetaBelgica project already
 
 [0.1.0]: https://github.com/kbrbe/xml-to-csv/releases/tag/v0.1.0
+[0.1.1]: https://github.com/kbrbe/xml-to-csv/compare/v0.1.0...v0.1.1
