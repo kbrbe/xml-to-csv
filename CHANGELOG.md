@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.1.1] - 2025-04-01
+
+
+### Changed
+
+- Parse years between the year 0 and 1000
+
+### Fixed
+
+- Consistently use the specified identifierPrefix from the config in main CSV _and_ 1:n column CSV files ([#20](https://github.com/kbrbe/xml-to-csv/issues/20))
+
 ## [0.1.0] - 2025-02-07
 
 ### Added
