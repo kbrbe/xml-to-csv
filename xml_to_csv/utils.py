@@ -8,7 +8,7 @@ from io import BytesIO
 import csv
 import os
 import re
-import xml_to_csv.csv_logger as csv_logger
+from . import csv_logger as csv_logger
 
 NS_MARCSLIM = 'http://www.loc.gov/MARC21/slim'
 ALL_NS = {'marc': NS_MARCSLIM}
@@ -197,6 +197,12 @@ def parseDate(date, patterns):
   >>> parseDate('1988.', ['%Y', '%Y.'])
   '1988'
 
+  >>> parseDate('780', ['%Y'])
+  '780'
+
+  >>> parseDate('93', ['%Y'])
+  '93'
+
   >>> parseDate('19340417', ["%Y", "(%Y)", "[%Y]", "%Y-%m-%d", "%Y--%m-%d", "%Y--%m--%d", "%d/%m/%Y", "%Y/%m/%d", "%Y%m%d", "%Y----", "%Y.%m.%d", "%d.%m.%Y"])
   '1934-04-17'
 
@@ -210,13 +216,17 @@ def parseDate(date, patterns):
 
   """
 
+  # handle years before the year 1000
+  if len(date) < 4 and date.isdigit():
+    date = date.zfill(4)
+
   parsedDate = None
   for p in patterns:
 
     try:
       # try if the value is a year
       tmp = datetime.strptime(date, p).date()
-      if len(date) == 4:
+      if len(date) <= 4:
         parsedDate = str(tmp.year)
       elif len(date) > 4 and len(date) <= 7:
         if any(ele in date for ele in ['(', '[', ')', ']', '.']):
@@ -378,9 +388,9 @@ def parseComplexDate(input_str, config, monthMapping):
     ...    }
     ... }
     >>> parseComplexDate("avant 1980", config, {"november": "11", "april": "04"})
-    '[..1980]'
+    ('[..1980]', 'before_year')
     >>> parseComplexDate("before November 1980 and after April 1978", config, {"november": "11", "april": "04"})
-    '1978-04/1980-11'
+    ('november-1980/april-1978', 'range_with_and_month')
     """
     # Normalize input
     norm_input = getNormalizedDateString(input_str)
