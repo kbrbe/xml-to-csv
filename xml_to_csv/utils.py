@@ -961,6 +961,8 @@ def getValueList(elem, config, configKey, dateConfig, monthMapping):
           else:
             # other value types require to analyze the text content
             # parsedValue could be None, this should handled appropriately
+            if needs_encoding_fixing(v.text):
+              v.text = fix_encoding(v.text)
             parsedValue = extractFieldValue(v.text, valueType, recordID, config, dateConfig, monthMapping, columnName)
 
             # add original value for current data field if necessary
