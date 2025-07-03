@@ -946,7 +946,7 @@ def getValueList(elem, config, configKey, dateConfig, monthMapping):
                 subfieldDelimiter = ';'
                 if len(subfieldValues) > 1:
                   logger.warning(f'multiple values for subfield {subfieldColumnName} in record {recordID} (concatenated with {subfieldDelimiter})', extra={'message_type': csv_logger.MESSAGE_TYPES['CONFIG_ERROR']})
-                subfieldTextValues = [s.text for s in subfieldValues if s.text is not None]
+                subfieldTextValues = [fix_encoding(s.text) if needs_encoding_fixing(s.text) else s.text for s in subfieldValues if s.text is not None]
           
                 if subfieldTextValues:
                   atLeastOneValue = True
