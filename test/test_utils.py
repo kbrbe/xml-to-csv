@@ -1,6 +1,8 @@
 import unittest
 import json
 import re
+
+import lxml.etree as ET
 import xml_to_csv.utils as utils
 from test.position_test_cases import PositionTestCases
 
@@ -115,3 +117,4 @@ class TestEncoding(unittest.TestCase):
             results[wrong] = utils.fix_encoding(wrong)
 
         self.assertDictEqual(TestEncoding.testStrings, results, msg="Some encoding values were not correctly fixed: {results}")
+
