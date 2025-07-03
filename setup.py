@@ -10,7 +10,7 @@ def read(fname):
 
 setuptools.setup(
     name = "xml_to_csv",
-    version = "0.1.1",
+    version = "0.1.2",
     url = "https://github.com/kbrbe/xml-to-csv",
     author = "Sven Lieber",
     author_email = "Sven.Lieber@kbr.be",
