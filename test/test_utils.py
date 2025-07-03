@@ -1,6 +1,8 @@
 import unittest
 import json
 import re
+
+import lxml.etree as ET
 import xml_to_csv.utils as utils
 from test.position_test_cases import PositionTestCases
 
@@ -91,4 +93,28 @@ class TestDateParsing(unittest.TestCase):
         # Check the result to match EDTF format expectation
         self.assertEqual(result, "1978-04/1980-11")
 
+class TestEncoding(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        cls.testStrings = {
+            'Ecole des Pays-Bas mÃ©ridionaux': 'Ecole des Pays-Bas méridionaux',
+            'Milieu XVe siÃ¨cle': 'Milieu XVe siècle'
+        }
+
+    def test_encoding_fixing_detection_needed(self):
+        results = {}
+        for wrong, correct in TestEncoding.testStrings.items():
+            results[wrong] = utils.needs_encoding_fixing(wrong)
+
+        errors = {key: value for key, value in results.items() if value is not True}
+        self.assertEqual(len(errors), 0, msg="The following wrongly encoded strings were not detected: {errors}")
+
+
+    def test_encoding_fixing_correct(self):
+        results = {}
+        for wrong, correct in TestEncoding.testStrings.items():
+            results[wrong] = utils.fix_encoding(wrong)
+
+        self.assertDictEqual(TestEncoding.testStrings, results, msg="Some encoding values were not correctly fixed: {results}")
 
