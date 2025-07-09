@@ -127,3 +127,8 @@ class TestEncoding(unittest.TestCase):
 
         self.assertDictEqual(TestEncoding.testStrings, results, msg='Some encoding values were not correctly fixed: {results}')
 
+    def test_encoding_fixing_invalid_type_list(self):
+        self.assertEqual(utils.fix_encoding([]), [], msg='list is not handled properly')
+
+    def test_encoding_fixing_invalid_type_dict(self):
+        self.assertEqual(utils.fix_encoding({}), {}, msg='dict is not handled properly')
