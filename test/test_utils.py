@@ -108,7 +108,23 @@ class TestEncoding(unittest.TestCase):
             results[wrong] = utils.needs_encoding_fixing(wrong)
 
         errors = {key: value for key, value in results.items() if value is not True}
-        self.assertEqual(len(errors), 0, msg="The following wrongly encoded strings were not detected: {errors}")
+        self.assertEqual(len(errors), 0, msg=f'The following wrongly encoded strings were not detected: {errors}')
+
+    # cannot be part of the testStrings dict, because the way we test with 'is not True' also reports empty strings
+    def test_encoding_fixing_detection_empty(self):
+        self.assertFalse(utils.needs_encoding_fixing(''), msg=f'Empty input is not handled correctly')
+
+
+    def test_encoding_fixing_detection_invalid_type_None(self):
+        self.assertFalse(utils.needs_encoding_fixing(None), msg=f'None as input is not handled correctly')
+
+
+    def test_encoding_fixing_detection_invalid_type_list(self):
+        self.assertFalse(utils.needs_encoding_fixing([]), msg=f'Empty list as input is not handled correctly')
+
+    def test_encoding_fixing_detection_invalid_type_dict(self):
+        self.assertFalse(utils.needs_encoding_fixing({}), msg=f'Empty dict as input is not handled correctly')
+
 
 
     def test_encoding_fixing_correct(self):
@@ -116,5 +132,10 @@ class TestEncoding(unittest.TestCase):
         for wrong, correct in TestEncoding.testStrings.items():
             results[wrong] = utils.fix_encoding(wrong)
 
-        self.assertDictEqual(TestEncoding.testStrings, results, msg="Some encoding values were not correctly fixed: {results}")
+        self.assertDictEqual(TestEncoding.testStrings, results, msg='Some encoding values were not correctly fixed: {results}')
 
+    def test_encoding_fixing_invalid_type_list(self):
+        self.assertEqual(utils.fix_encoding([]), [], msg='list is not handled properly')
+
+    def test_encoding_fixing_invalid_type_dict(self):
+        self.assertEqual(utils.fix_encoding({}), {}, msg='dict is not handled properly')
