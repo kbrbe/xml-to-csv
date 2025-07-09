@@ -99,9 +99,7 @@ class TestEncoding(unittest.TestCase):
     def setUpClass(cls):
         cls.testStrings = {
             'Ecole des Pays-Bas mÃ©ridionaux': 'Ecole des Pays-Bas méridionaux',
-            'Milieu XVe siÃ¨cle': 'Milieu XVe siècle',
-            '': '',
-            None: None
+            'Milieu XVe siÃ¨cle': 'Milieu XVe siècle'
         }
 
     def test_encoding_fixing_detection_needed(self):
@@ -111,6 +109,15 @@ class TestEncoding(unittest.TestCase):
 
         errors = {key: value for key, value in results.items() if value is not True}
         self.assertEqual(len(errors), 0, msg=f'The following wrongly encoded strings were not detected: {errors}')
+
+    # cannot be part of the testStrings dict, because the way we test with 'is not True' also reports empty strings
+    def test_encoding_fixing_detection_empty(self):
+        self.assertFalse(utils.needs_encoding_fixing(''), msg=f'Empty input is not handled correctly')
+
+
+    def test_encoding_fixing_detection_invalid_type_None(self):
+        self.assertFalse(utils.needs_encoding_fixing(None), msg=f'None as input is not handled correctly')
+
 
     def test_encoding_fixing_detection_invalid_type_list(self):
         self.assertFalse(utils.needs_encoding_fixing([]), msg=f'Empty list as input is not handled correctly')

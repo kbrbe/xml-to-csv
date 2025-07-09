@@ -852,6 +852,9 @@ def needs_encoding_fixing(text):
     except (UnicodeEncodeError, UnicodeDecodeError):
         # Likely already correct UTF-8
         return False
+    except:
+        # For any other issue also return False, because invalid input also does not need fixing
+        return False
 
 # -----------------------------------------------------------------------------
 def fix_encoding(text):
@@ -861,6 +864,9 @@ def fix_encoding(text):
         return fixed_text
     except UnicodeDecodeError:
         # Return the original text if decoding fails
+        return text
+    except:
+        # Return the original also for issues, encoding of invalid input can not be fixed
         return text
 
 # -----------------------------------------------------------------------------
