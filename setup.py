@@ -10,7 +10,7 @@ def read(fname):
 
 setuptools.setup(
     name = "xml_to_csv",
-    version = "0.1.3",
+    version = "0.1.4",
     url = "https://github.com/kbrbe/xml-to-csv",
     author = "Sven Lieber",
     author_email = "Sven.Lieber@kbr.be",
@@ -18,6 +18,10 @@ setuptools.setup(
     license = "MIT",
     keywords = "xml csv config json extraction transform",
     packages=setuptools.find_packages(),
+    install_requires=[
+      "lxml>=5.2.2",
+      "tqdm>=4.66.4"
+    ],
     long_description_content_type = "text/markdown",
     long_description=read('README.md')
 )
