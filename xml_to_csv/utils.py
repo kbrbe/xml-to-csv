@@ -274,13 +274,13 @@ def roman_to_century(roman_numeral):
 
 # -----------------------------------------------------------------------------
 def compile_pattern(pattern, components):
-    """Replaces placeholders in the pattern with actual regex components.
+    r"""Replaces placeholders in the pattern with actual regex components.
     >>> config = {
     ...    "components": {
     ...      "keywords": {
-    ...        "before": r"\b(?:before|avant|Avant)\b",
-    ...        "after": r"\b(?:after|après|Après)\b",
-    ...        "and": r"\b(?:and|et|Et)\b",
+    ...        "before": r"(?:before|avant|Avant)",
+    ...        "after": r"(?:after|après|Après)",
+    ...        "and": r"(?:and|et|Et)",
     ...      },
     ...      "months": {
     ...        "English": { "November": "11", "April": "04" }
@@ -297,13 +297,16 @@ def compile_pattern(pattern, components):
     ...      "range_with_and": { "pattern": r"%(keywords.before)s\s+%(month)s\s+%(year)s\s+%(keywords.and)s\s+%(keywords.after)s\s+%(month)s\s+%(year)s", "template": "%s-%s/%s-%s"}
     ...    }
     ... }
-    >>> pattern = compile_pattern(r"%(keywords.before)s\\s+%(year)s", config["components"])
-    >>> re.match(pattern, "Avant 2023").group(0)
-    'Avant 2023'
 
-    >>> pattern = compile_pattern(r"%(keywords.before)s\\s+(%(months.generic)s)\\s+%(year)s\\s+%(keywords.and)s\\s+%(keywords.after)s\\s+(%(months.generic)s)\\s+%(year)s", config["components"])
-    >>> re.match(pattern, "Before November 2004 and after April 2002").group(0)
-    'Before November 2004 and after April 2022'
+    The pattern compilation should replace (keywords.before)s with the actual before keywords
+    Hence the word Avant should be one of the options and eventually "Avant 2023" should be matched
+    >>> pattern = compile_pattern(r"%(keywords.before)s\s+%(year)s", config["components"])
+    >>> re.match(pattern, "avant 2023").group(0)
+    'avant 2023'
+
+    >>> pattern = compile_pattern(r"%(keywords.before)s\s+(%(months.generic)s)\s+%(year)s\s+%(keywords.and)s\s+%(keywords.after)s\s+(%(months.generic)s)\s+%(year)s", config["components"])
+    >>> re.match(pattern, "before november 2004 and after april 2002").group(0)
+    'before november 2004 and after april 2002'
 
     """ 
     placeholders = re.findall(r'%\(([^)]+)\)s', pattern)
@@ -316,7 +319,8 @@ def compile_pattern(pattern, components):
             for language, months in components['months'].items():
                 month_patterns.extend(months.keys())
             month_names = '|'.join(re.escape(getNormalizedDateString(month)) for month in month_patterns)
-            component_map[ph] = rf"\b{month_names}"
+            component_map[ph] = rf"(?:{month_names})"
+            #component_map[ph] = rf"\b(?:{month_names})\b"
         else:
             keys = ph.split('.')
             if len(keys) == 2:
@@ -361,7 +365,7 @@ def getNumericMonth(monthString, monthMapping):
 
 # -----------------------------------------------------------------------------
 def parseComplexDate(input_str, config, monthMapping):
-    """Parse a date string based on the provided configuration.
+    r"""Parse a date string based on the provided configuration.
     
     Args:
         input_str (str): The date string to parse.
@@ -373,9 +377,9 @@ def parseComplexDate(input_str, config, monthMapping):
     >>> config = {
     ...    "components": {
     ...      "keywords": {
-    ...        "before": r"\\b(?:before|avant|Avant)\\b",
-    ...        "after": r"\\b(?:after|après|Après)\\b",
-    ...        "and": r"\\b(?:and|et|Et)\\b",
+    ...        "before": r"(?:before|avant|Avant)",
+    ...        "after": r"(?:after|après|Après)",
+    ...        "and": r"(?:and|et|Et)",
     ...      },
     ...      "months": {
     ...        "English": { "November": "11", "April": "04" }
@@ -587,7 +591,7 @@ def getNormalizedDateString(s):
   
 # -----------------------------------------------------------------------------
 def passFilter(elem, filterConfig):
-  """This function checks if the given element passes the specified filter condition.
+  r"""This function checks if the given element passes the specified filter condition.
      If the expression of the filter finds several elements, all have to pass the filter.
 
   The filter expression equals checks for equality
@@ -599,6 +603,13 @@ def passFilter(elem, filterConfig):
   >>> elem1 = ET.fromstring("<root><datafield>other value</datafield></root>")
   >>> passFilter(elem1, filterPseudonym)
   False
+
+  #The filter expression startswith checks for substring
+  #>>> filterPseudonym = {"expression":"./datafield", "condition": "startswith", "value": "p"}
+  #>>> elem0 = ET.fromstring("<root><datafield>pAndALotOfOtherText</datafield></root>")
+  #>>> passFilter(elem0, filterPseudonym)
+  #True
+
 
   An exception is thrown if the filter expression is not found
   >>> elem2 = ET.fromstring("<root><otherField>other value</otherField></root>")

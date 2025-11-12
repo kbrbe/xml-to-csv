@@ -1,4 +1,5 @@
 import unittest
+import doctest
 import json
 import re
 
@@ -71,16 +72,16 @@ class TestDateParsing(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         # Load the config from JSON file
-        with open("date-mapping.json", "r") as file:
+        with open("test/resources/date-mapping.json", "r") as file:
             cls.config = json.load(file)
 
     def test_compile_pattern(self):
         # Test a specific pattern compilation
-        pattern_str = self.config["rules"]["before_month_year"]["pattern"]
+        pattern_str = self.config["rules"]["before_written_month_year"]["pattern"]
         compiled_pattern = utils.compile_pattern(pattern_str, self.config["components"])
         
         # Ensure that the pattern matches as expected
-        test_string = "before November 1980"
+        test_string = "before november 1980"
         match = re.match(compiled_pattern, test_string)
         self.assertIsNotNone(match)
         self.assertEqual(match.group(0), test_string)
@@ -91,7 +92,8 @@ class TestDateParsing(unittest.TestCase):
         result = utils.parseComplexDate("before November 1980 and after April 1978", self.config, monthMapping)
         
         # Check the result to match EDTF format expectation
-        self.assertEqual(result, "1978-04/1980-11")
+        self.assertEqual(result[0], "1978-04/1980-11")
+        self.assertEqual(result[1], "range_with_and_written_month")
 
 class TestEncoding(unittest.TestCase):
 
@@ -139,3 +141,8 @@ class TestEncoding(unittest.TestCase):
 
     def test_encoding_fixing_invalid_type_dict(self):
         self.assertEqual(utils.fix_encoding({}), {}, msg='dict is not handled properly')
+
+def load_tests(loader, tests, ignore):
+  tests.addTests(doctest.DocTestSuite(utils, optionflags=doctest.NORMALIZE_WHITESPACE | doctest.ELLIPSIS))
+  return tests
+
