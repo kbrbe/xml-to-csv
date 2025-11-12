@@ -604,13 +604,6 @@ def passFilter(elem, filterConfig):
   >>> passFilter(elem1, filterPseudonym)
   False
 
-  #The filter expression startswith checks for substring
-  #>>> filterPseudonym = {"expression":"./datafield", "condition": "startswith", "value": "p"}
-  #>>> elem0 = ET.fromstring("<root><datafield>pAndALotOfOtherText</datafield></root>")
-  #>>> passFilter(elem0, filterPseudonym)
-  #True
-
-
   An exception is thrown if the filter expression is not found
   >>> elem2 = ET.fromstring("<root><otherField>other value</otherField></root>")
   >>> passFilter(elem2, filterPseudonym)
@@ -645,6 +638,13 @@ def passFilter(elem, filterConfig):
   >>> elem7 = ET.fromstring("<root><otherField>p</otherField></root>")
   >>> passFilter(elem7, filterExist)
   False
+
+  The filter expression startswith checks for substring
+  >>> filterStartsWith = {"expression":"./datafield", "condition": "startswith", "value": "p"}
+  >>> elem8 = ET.fromstring("<root><datafield>pAndALotOfOtherText</datafield></root>")
+  >>> passFilter(elem8, filterStartsWith)
+  True
+
   """
 
   filterExpression = filterConfig["expression"]
@@ -668,7 +668,12 @@ def passFilter(elem, filterConfig):
             filterPassed.append(True)
           else:
             filterPassed.append(False)
-          
+           
+      # If nothing is in filterPassed, then nothing is there
+      if not filterPassed:
+        return False
+
+      # If we reach this, there is something in filter passed, let's check in detail
       if all(filterPassed):
         return True
       else:
