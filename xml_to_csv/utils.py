@@ -668,6 +668,9 @@ def passFilter(elem, filterConfig):
             filterPassed.append(True)
           else:
             filterPassed.append(False)
+        elif condition == "startswith":
+          if value.text.startswith(filterConfig["value"]):
+            filterPassed.append(True)
            
       # If nothing is in filterPassed, then nothing is there
       if not filterPassed:
