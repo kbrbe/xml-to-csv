@@ -1065,6 +1065,7 @@ def processRecord(elem, config, dateConfig, monthMapping, outputWriter, files, p
   outputWriter.writerow(outputRow)
 
   splitCharacters = {c['columnName']: c['splitCharacter'] for c in config['dataFields'] if 'splitCharacter' in c }
+  columnTypes = {c['columnName']: c['valueType'] for c in config['dataFields'] if 'valueType' in c }
 
   # (2) Create a CSV output file for each selected columns to resolve 1:n relationships
   if prefix != "":
@@ -1072,6 +1073,7 @@ def processRecord(elem, config, dateConfig, monthMapping, outputWriter, files, p
 
     for columnName, valueList in recordData.items():
 
+      # this is a content column specified in "dataFields" (not the ID column)
       if valueList and columnName != config["recordIDColumnName"]:
 
 
@@ -1082,14 +1084,30 @@ def processRecord(elem, config, dateConfig, monthMapping, outputWriter, files, p
 
           # skip if none, e.g. if {"birthDate": {"birthDate": None} }
           if any(v.values()):
-            if columnName in splitCharacters and splitCharacters[columnName] != '':
+
+            # We have to do the splitCharacter check, either on field or subfields
+            if columnName in columnTypes and columnTypes[columnName] == 'json':
+              # yes we have subfields, check splitCharacter per subfield
+              # example if subfields: v = {'place': 'Ghent ; Gent', 'country': 'Belgium ; België'}
               pass
-              # example: v = {'field': 'value1 ; value2'}
-              
             else:
-              outputRow = v
-              outputRow.update({config["recordIDColumnName"]: identifierPrefix + recordID})
-              files[columnName].writerow(outputRow)
+              # no subfields, do we have to split?
+              if columnName in splitCharacters and splitCharacters[columnName] != '':
+                # example no subfields: v = {'field': 'value1 ; value2'}
+                # there can be a separate key 'field-original', but we don't have to touch it
+                splittedValues = v[columnName].split(splitCharacters[columnName])
+                for s in splittedValues:
+                  if s != '':
+                    outputRow = v
+                    outputRow[columnName] = s.strip()
+                    outputRow.update({config["recordIDColumnName"]: identifierPrefix + recordID})
+                    files[columnName].writerow(outputRow)
+                     
+              else:
+                # no subfields and no splitting
+                outputRow = v
+                outputRow.update({config["recordIDColumnName"]: identifierPrefix + recordID})
+                files[columnName].writerow(outputRow)
 
         #if isinstance(valueList, list):
         #  pass
