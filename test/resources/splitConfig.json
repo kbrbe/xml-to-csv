@@ -8,7 +8,7 @@
       "columnName": "field",
       "expression": "./field",
       "valueType": "text",
-      "split": true
+      "splitCharacter": ";"
     }
   ]
 }
