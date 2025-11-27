@@ -1064,6 +1064,8 @@ def processRecord(elem, config, dateConfig, monthMapping, outputWriter, files, p
         outputRow[columnName] = ''
   outputWriter.writerow(outputRow)
 
+  splitCharacters = {c['columnName']: c['splitCharacter'] for c in config['dataFields'] if 'splitCharacter' in c }
+
   # (2) Create a CSV output file for each selected columns to resolve 1:n relationships
   if prefix != "":
     recordID = recordData[config["recordIDColumnName"]]
@@ -1072,15 +1074,22 @@ def processRecord(elem, config, dateConfig, monthMapping, outputWriter, files, p
 
       if valueList and columnName != config["recordIDColumnName"]:
 
+
         # simple 1:n relationship: one row per value
         # but it is one dictionary per relationship, 
-        # because we eventually have the parsed value and the original value
+        # because we eventually have a whole dictionary with subfields like the parsed value and the original value
         for v in valueList:
+
           # skip if none, e.g. if {"birthDate": {"birthDate": None} }
           if any(v.values()):
-            outputRow = v
-            outputRow.update({config["recordIDColumnName"]: identifierPrefix + recordID})
-            files[columnName].writerow(outputRow)
+            if columnName in splitCharacters and splitCharacters[columnName] != '':
+              pass
+              # example: v = {'field': 'value1 ; value2'}
+              
+            else:
+              outputRow = v
+              outputRow.update({config["recordIDColumnName"]: identifierPrefix + recordID})
+              files[columnName].writerow(outputRow)
 
         #if isinstance(valueList, list):
         #  pass

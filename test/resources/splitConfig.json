@@ -9,6 +9,25 @@
       "expression": "./field",
       "valueType": "text",
       "splitCharacter": ";"
+    },
+    {
+      "columnName": "location",
+      "expression": "./location",
+      "valueType": "json",
+      "subfields": [
+        {
+          "columnName": "place",
+          "expression": "./place",
+          "valueType": "text",
+          "splitCharacter": ";"
+        },
+        {
+          "columnName": "country",
+          "expression": "./country",
+          "valueType": "text",
+          "splitCharacter": ";"
+        }
+      ]
     }
   ]
 }
