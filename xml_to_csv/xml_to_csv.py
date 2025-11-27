@@ -115,7 +115,7 @@ def main(inputFilenames, outputFilename, configFilename, dateConfigFilename, pre
 
             # The first 6 arguments are related to the fast_iter function
             # everything afterwards will directly be given to processRecord
-            utils.fast_iter_batch(inputFilename, positions, processRecord, recordTag, pbar, config, dateConfig, monthMapping, updateFrequency, batchSize, outputWriter, files, prefix)
+            utils.fast_iter_batch(inputFilename, positions, utils.processRecord, recordTag, pbar, config, dateConfig, monthMapping, updateFrequency, batchSize, outputWriter, files, prefix)
 
           else:
             logger.info(f'regular iterative processing ...')
@@ -123,7 +123,7 @@ def main(inputFilenames, outputFilename, configFilename, dateConfigFilename, pre
             context = ET.iterparse(inputFilename, tag=recordTag)
             utils.fast_iter(
               context, # the XML context
-              processRecord, # the function that is called for every found recordTag
+              utils.processRecord, # the function that is called for every found recordTag
               pbar, # the progress bar that should be updated
               config, # configuration object with counters and other data
               dateConfig, # configuration object for date parsing
@@ -161,75 +161,6 @@ def getRecordTagName(config):
 
   return recordTag
 
-
-# -----------------------------------------------------------------------------
-def processRecord(elem, config, dateConfig, monthMapping, outputWriter, files, prefix):
-
-  if "recordFilter" in config:
-    try:
-      if not utils.passFilter(elem, config["recordFilter"]):
-        config['counters']['filteredRecordCounter'] += 1
-        return None
-    except Exception as e:
-        recordID = utils.getElementValue(elem.find(config['recordIDExpression'], ALL_NS))
-        config['counters']['filteredRecordExceptionCounter'] += 1
-        return None
-
-  recordData = utils.getValueList(elem, config, "dataFields", dateConfig, monthMapping)
-
-  identifierPrefix = config["recordIDPrefix"] if "recordIDPrefix" in config else ''
-
-  # (1) write output to the general CSV file
-  outputRow = {config["recordIDColumnName"]: identifierPrefix + recordData[config["recordIDColumnName"]]}
-  for columnName, extractedValues in recordData.items():
-    if columnName != config["recordIDColumnName"]:
-      outputRow[columnName] = []
-      if extractedValues:
-        # there are one or more results for this column
-        for valueDict in extractedValues:
-          if columnName in valueDict and 'rule' not in valueDict:
-            # the result contains a subfield with the same name as the column
-            # i.e. not type json, but a regular column with possible original
-            for valueColumnName, singleValue in valueDict.items():
-              singleValue = singleValue if singleValue else ''
-              if valueColumnName in outputRow:
-                outputRow[valueColumnName].append(singleValue)
-              else:
-                outputRow[valueColumnName] = [singleValue]
-
-          else:
-            # the result contains subfields (i.e. type json), write as-is
-            outputRow[columnName].append(valueDict)
-      else:
-        outputRow[columnName] = ''
-  outputWriter.writerow(outputRow)
-
-  # (2) Create a CSV output file for each selected columns to resolve 1:n relationships
-  if prefix != "":
-    recordID = recordData[config["recordIDColumnName"]]
-
-    for columnName, valueList in recordData.items():
-
-      if valueList and columnName != config["recordIDColumnName"]:
-
-        # simple 1:n relationship: one row per value
-        # but it is one dictionary per relationship, 
-        # because we eventually have the parsed value and the original value
-        for v in valueList:
-          # skip if none, e.g. if {"birthDate": {"birthDate": None} }
-          if any(v.values()):
-            outputRow = v
-            outputRow.update({config["recordIDColumnName"]: identifierPrefix + recordID})
-            files[columnName].writerow(outputRow)
-
-        #if isinstance(valueList, list):
-        #  pass
-        #elif isinstance(valueList, dict):
-        #  # complex 1:n relationship: one row per value, but subfields require multiple columns
-        #  # this data comes from valueType JSON
-        #  valueList.update({config["recordIDColumnName"]: recordID})
-        #  files[columnName].writerow(valueList)
-          
 
 # -----------------------------------------------------------------------------
 def parseArguments():

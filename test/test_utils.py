@@ -1,8 +1,12 @@
 import unittest
 import doctest
 import json
+import csv
+import time
 import re
+import tempfile
 
+import test.helpers as helpers
 import lxml.etree as ET
 import xml_to_csv.utils as utils
 from test.position_test_cases import PositionTestCases
@@ -142,6 +146,130 @@ class TestEncoding(unittest.TestCase):
     def test_encoding_fixing_invalid_type_dict(self):
         self.assertEqual(utils.fix_encoding({}), {}, msg='dict is not handled properly')
 
+
+class TestRecordProcessing(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        cls.singleElementWithSingleValue = ET.fromstring("<record><id>1</id><field>value</field></record>")
+        cls.singleElementWithMultipleValues = ET.fromstring("<record><id>1</id><field>value1 ; value2</field></record>")
+        cls.multipleElementsWithSingleValue = ET.fromstring("<record><id>1</id><field>value1</field><field>value2</field></record>")
+        cls.multipleElementsWithMultipleValues = ET.fromstring("<record><field>value1 ; value 2</field><field>value3</field></record>")
+        cls.elementWithMissingSplit = ET.fromstring("<record><field>value 1 ; </field></record>")
+
+        with open('test/resources/splitConfig.json', 'r') as configFile:
+          cls.splitConfig = json.load(configFile)
+
+        with open('test/resources/nonSplitConfig.json', 'r') as configFile:
+          cls.nonSplitConfig = json.load(configFile)
+
+        with open('test/resources/date-mapping.json', 'r') as dateConfigFile:
+          cls.dateConfig = json.load(dateConfigFile)
+  
+        # build a single numeric month lookup data structure
+        cls.monthMapping = utils.buildMonthMapping(cls.dateConfig)
+
+    def _run_record_processing(self, xml_element, config):
+        """Runs processRecord with the given XML and returns the extracted field records."""
+
+        with tempfile.NamedTemporaryFile(mode='w+', delete=False) as mainOutFile, \
+             tempfile.NamedTemporaryFile(mode='w+', delete=False) as fieldFile:
+
+            mainOutputWriter = csv.DictWriter(mainOutFile, fieldnames=['autID', 'field'])
+            fieldWriter = csv.DictWriter(fieldFile, fieldnames=['autID', 'field'])
+
+            mainOutputWriter.writeheader()
+            fieldWriter.writeheader()
+
+            utils.processRecord(
+                xml_element,
+                config,
+                self.dateConfig,
+                self.monthMapping,
+                mainOutputWriter,
+                {'field': fieldWriter},
+                'prefix'
+            )
+
+            mainOutFile.flush()
+            fieldFile.flush()
+
+            # Parse and return the actual processed field data
+            return helpers.getRecordsAsDict(mainOutFile.name), helpers.getRecordsAsDict(fieldFile.name)
+
+
+ 
+    # -------------------------------------------------------------------------
+    def test_record_single_field_single_value_no_split(self):
+
+        resultMain, resultField  = self._run_record_processing(TestRecordProcessing.singleElementWithSingleValue, TestRecordProcessing.nonSplitConfig)
+        
+        self.assertEqual(len(resultField),1, msg='There should be only one record, but found {len(resultField)}')
+        self.assertEqual(resultField[0]['field'], 'value', msg=f'Extracted value should be "value", but is {resultField[0]["field"]}')
+
+    # -------------------------------------------------------------------------
+    def test_record_single_field_multiple_values_no_split(self):
+
+        resultMain, resultField = self._run_record_processing(TestRecordProcessing.singleElementWithMultipleValues, TestRecordProcessing.nonSplitConfig)
+        
+        self.assertEqual(len(resultField),1, msg='There should be only one record, but found {len(resultField)}')
+        self.assertEqual(resultField[0]['field'], 'value1 ; value2', msg=f'Extracted value should be "value", but is {resultField[0]["field"]}')
+
+    # -------------------------------------------------------------------------
+    def test_record_single_field_multiple_values_split(self):
+
+        resultMain, resultField = self._run_record_processing(TestRecordProcessing.singleElementWithMultipleValues, TestRecordProcessing.splitConfig)
+        
+        self.assertEqual(len(resultField),2, msg='There should be two records (from a single field), but found {len(resultField)}')
+        self.assertEqual(resultField[0]['field'], 'value1', msg=f'Extracted value should be "value1", but is {resultField[0]["field"]}')
+        self.assertEqual(resultField[1]['field'], 'value2', msg=f'Extracted value should be "value2", but is {resultField[1]["field"]}')
+
+
+    # -------------------------------------------------------------------------
+    def test_record_multiple_fields_single_value_split(self):
+
+        resultMain, resultField = self._run_record_processing(TestRecordProcessing.multipleElementsWithSingleValue, TestRecordProcessing.splitConfig)
+        self.assertEqual(len(resultField),2, msg='There should be two records (from two fields), but found {len(resultField)}')
+        self.assertEqual(resultField[0]['field'], 'value1', msg=f'Extracted value should be "value1", but is {resultField[0]["field"]}')
+        self.assertEqual(resultField[1]['field'], 'value2', msg=f'Extracted value should be "value2", but is {resultField[1]["field"]}')
+
+    # -------------------------------------------------------------------------
+    def test_record_multiple_fields_single_value_no_split(self):
+
+        resultMain, resultField = self._run_record_processing(TestRecordProcessing.multipleElementsWithSingleValue, TestRecordProcessing.nonSplitConfig)
+        self.assertEqual(len(resultField),2, msg='There should be two records (from two fields), but found {len(resultField)}')
+        self.assertEqual(resultField[0]['field'], 'value1', msg=f'Extracted value should be "value1", but is {resultField[0]["field"]}')
+        self.assertEqual(resultField[1]['field'], 'value2', msg=f'Extracted value should be "value2", but is {resultField[1]["field"]}')
+
+
+    # -------------------------------------------------------------------------
+    def test_record_multiple_fields_multiple_values_no_split(self):
+
+        resultMain, resultField = self._run_record_processing(TestRecordProcessing.multipleElementsWithMultipleValues, TestRecordProcessing.splitConfig)
+        self.assertEqual(len(resultField),2, msg='There should be two records (from two fields), but found {len(resultField)}')
+        self.assertEqual(resultField[0]['field'], 'value1 ; value2', msg=f'Extracted value should be "value1 ; value2", but is {resultField[0]["field"]}')
+        self.assertEqual(resultField[1]['field'], 'value3', msg=f'Extracted value should be "value3", but is {resultField[1]["field"]}')
+
+    # -------------------------------------------------------------------------
+    def test_record_multiple_fields_multiple_values_split(self):
+
+        resultMain, resultField = self._run_record_processing(TestRecordProcessing.multipleElementsWithMultipleValues, TestRecordProcessing.nonSplitConfig)
+        self.assertEqual(len(resultField),3, msg='There should be two records (from two fields), but found {len(resultField)}')
+        self.assertEqual(resultField[0]['field'], 'value1', msg=f'Extracted value should be "value1", but is {resultField[0]["field"]}')
+        self.assertEqual(resultField[1]['field'], 'value2', msg=f'Extracted value should be "value2", but is {resultField[1]["field"]}')
+        self.assertEqual(resultField[2]['field'], 'value3', msg=f'Extracted value should be "value3", but is {resultField[2]["field"]}')
+
+    # -------------------------------------------------------------------------
+    def test_record_single_field_multiple_values_broken_split(self):
+
+        resultMain, resultField = self._run_record_processing(TestRecordProcessing.elementWithMissingSplit, TestRecordProcessing.splitConfig)
+        self.assertEqual(len(resultField),1, msg='There should be only one record, but found {len(resultField)}')
+        self.assertEqual(resultField[0]['field'], 'value1', msg=f'Extracted value should be "value", but is {resultField[0]["field"]}')
+
+
+
+
+# -----------------------------------------------------------------------------
 def load_tests(loader, tests, ignore):
   tests.addTests(doctest.DocTestSuite(utils, optionflags=doctest.NORMALIZE_WHITESPACE | doctest.ELLIPSIS))
   return tests

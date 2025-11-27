@@ -1022,6 +1022,75 @@ def getValueList(elem, config, configKey, dateConfig, monthMapping):
   recordData = {k:"" if not v else v for k,v in recordData.items()}
   return recordData
 
+# -----------------------------------------------------------------------------
+def processRecord(elem, config, dateConfig, monthMapping, outputWriter, files, prefix):
+
+  if "recordFilter" in config:
+    try:
+      if not passFilter(elem, config["recordFilter"]):
+        config['counters']['filteredRecordCounter'] += 1
+        return None
+    except Exception as e:
+        recordID = getElementValue(elem.find(config['recordIDExpression'], ALL_NS))
+        config['counters']['filteredRecordExceptionCounter'] += 1
+        return None
+
+  recordData = getValueList(elem, config, "dataFields", dateConfig, monthMapping)
+
+  identifierPrefix = config["recordIDPrefix"] if "recordIDPrefix" in config else ''
+
+  # (1) write output to the general CSV file
+  outputRow = {config["recordIDColumnName"]: identifierPrefix + recordData[config["recordIDColumnName"]]}
+  for columnName, extractedValues in recordData.items():
+    if columnName != config["recordIDColumnName"]:
+      outputRow[columnName] = []
+      if extractedValues:
+        # there are one or more results for this column
+        for valueDict in extractedValues:
+          if columnName in valueDict and 'rule' not in valueDict:
+            # the result contains a subfield with the same name as the column
+            # i.e. not type json, but a regular column with possible original
+            for valueColumnName, singleValue in valueDict.items():
+              singleValue = singleValue if singleValue else ''
+              if valueColumnName in outputRow:
+                outputRow[valueColumnName].append(singleValue)
+              else:
+                outputRow[valueColumnName] = [singleValue]
+
+          else:
+            # the result contains subfields (i.e. type json), write as-is
+            outputRow[columnName].append(valueDict)
+      else:
+        outputRow[columnName] = ''
+  outputWriter.writerow(outputRow)
+
+  # (2) Create a CSV output file for each selected columns to resolve 1:n relationships
+  if prefix != "":
+    recordID = recordData[config["recordIDColumnName"]]
+
+    for columnName, valueList in recordData.items():
+
+      if valueList and columnName != config["recordIDColumnName"]:
+
+        # simple 1:n relationship: one row per value
+        # but it is one dictionary per relationship, 
+        # because we eventually have the parsed value and the original value
+        for v in valueList:
+          # skip if none, e.g. if {"birthDate": {"birthDate": None} }
+          if any(v.values()):
+            outputRow = v
+            outputRow.update({config["recordIDColumnName"]: identifierPrefix + recordID})
+            files[columnName].writerow(outputRow)
+
+        #if isinstance(valueList, list):
+        #  pass
+        #elif isinstance(valueList, dict):
+        #  # complex 1:n relationship: one row per value, but subfields require multiple columns
+        #  # this data comes from valueType JSON
+        #  valueList.update({config["recordIDColumnName"]: recordID})
+        #  files[columnName].writerow(valueList)
+          
+
 
 
 # -----------------------------------------------------------------------------

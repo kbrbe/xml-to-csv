@@ -1,0 +1,15 @@
+{
+  "datePatterns": ["%Y", "(%Y)", "[%Y]", "%Y-%m-%d", "%d/%m/%Y", "%Y%m%d"],
+  "recordTag": "record",
+  "recordIDExpression": "./id",
+  "recordIDColumnName": "autID",
+  "dataFields": [
+    {
+      "columnName": "field",
+      "expression": "./field",
+      "valueType": "text",
+      "split": true
+    }
+  ]
+}
+
