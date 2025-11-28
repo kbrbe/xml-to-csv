@@ -1,0 +1,34 @@
+{
+  "datePatterns": ["%Y", "(%Y)", "[%Y]", "%Y-%m-%d", "%d/%m/%Y", "%Y%m%d"],
+  "recordTag": "record",
+  "recordIDExpression": "./id",
+  "recordIDColumnName": "autID",
+  "dataFields": [
+    {
+      "columnName": "field",
+      "expression": "./field",
+      "valueType": "text",
+      "splitCharacter": ";"
+    },
+    {
+      "columnName": "location",
+      "expression": "./location",
+      "valueType": "json",
+      "subfields": [
+        {
+          "columnName": "place",
+          "expression": "./place",
+          "valueType": "text",
+          "splitCharacter": ";"
+        },
+        {
+          "columnName": "country",
+          "expression": "./country",
+          "valueType": "text",
+          "splitCharacter": ";"
+        }
+      ]
+    }
+  ]
+}
+

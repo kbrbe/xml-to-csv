@@ -4,6 +4,7 @@ import gc
 import lxml.etree as ET
 import unicodedata as ud
 import logging
+import itertools
 from io import BytesIO
 import csv
 import os
@@ -889,6 +890,25 @@ def fix_encoding(text):
         return text
 
 # -----------------------------------------------------------------------------
+def split_values_with_config(data, splitConfig):
+    processed = {}
+
+    for key, value in data.items():
+        if key in splitConfig:
+            delimiter = splitConfig[key]
+            processed[key] = [v.strip() for v in value.split(delimiter) if v.strip()]
+        else:
+            # no split for this field
+            processed[key] = [value.strip()]
+    
+    # Cartesian product
+    return [
+        dict(zip(processed.keys(), combo))
+        for combo in itertools.product(*processed.values())
+    ]
+
+
+# -----------------------------------------------------------------------------
 def getValueList(elem, config, configKey, dateConfig, monthMapping):
   """This function extracts all values from the XML element elem according to the config
   Example output: {'isni': '', 'bnf': '', 'name': [{'name': 'Hayashi Motoharu'}], 'birthDate': [{'birthDate': '1858', 'rule': 'simplePattern'}], 'deathDate': [{'deathDate': None}], 'birthPlace': [{'birthTown': 'Osaka', 'birthCountry': 'Japon'}], 'deathPlace': '', 'autID': '6840'}
@@ -1021,6 +1041,128 @@ def getValueList(elem, config, configKey, dateConfig, monthMapping):
     
   recordData = {k:"" if not v else v for k,v in recordData.items()}
   return recordData
+
+# -----------------------------------------------------------------------------
+def processRecord(elem, config, dateConfig, monthMapping, outputWriter, files, prefix):
+
+  if "recordFilter" in config:
+    try:
+      if not passFilter(elem, config["recordFilter"]):
+        config['counters']['filteredRecordCounter'] += 1
+        return None
+    except Exception as e:
+        recordID = getElementValue(elem.find(config['recordIDExpression'], ALL_NS))
+        config['counters']['filteredRecordExceptionCounter'] += 1
+        return None
+
+  recordData = getValueList(elem, config, "dataFields", dateConfig, monthMapping)
+
+  identifierPrefix = config["recordIDPrefix"] if "recordIDPrefix" in config else ''
+
+  # (1) write output to the general CSV file
+  outputRow = {config["recordIDColumnName"]: identifierPrefix + recordData[config["recordIDColumnName"]]}
+  for columnName, extractedValues in recordData.items():
+    if columnName != config["recordIDColumnName"]:
+      outputRow[columnName] = []
+      if extractedValues:
+        # there are one or more results for this column
+        for valueDict in extractedValues:
+          if columnName in valueDict and 'rule' not in valueDict:
+            # the result contains a subfield with the same name as the column
+            # i.e. not type json, but a regular column with possible original
+            for valueColumnName, singleValue in valueDict.items():
+              singleValue = singleValue if singleValue else ''
+              if valueColumnName in outputRow:
+                outputRow[valueColumnName].append(singleValue)
+              else:
+                outputRow[valueColumnName] = [singleValue]
+
+          else:
+            # the result contains subfields (i.e. type json), write as-is
+            outputRow[columnName].append(valueDict)
+      else:
+        outputRow[columnName] = ''
+  outputWriter.writerow(outputRow)
+
+  splitCharacters = {c['columnName']: c['splitCharacter'] for c in config['dataFields'] if 'splitCharacter' in c }
+  splitCharactersSubfields = {c['columnName']: c['splitCharacter'] for c in config['dataFields'] if 'splitCharacter' in c }
+  columnTypes = {c['columnName']: c['valueType'] for c in config['dataFields'] if 'valueType' in c }
+
+  subFieldSplitCharacters = {}
+
+  for field in config["dataFields"]:
+    if field.get("valueType") == "json":
+        subSplits = {
+            sf["columnName"]: sf["splitCharacter"]
+            for sf in field.get("subfields", [])
+            if "splitCharacter" in sf
+        }
+        if subSplits:
+            subFieldSplitCharacters[field["columnName"]] = subSplits
+
+  # (2) Create a CSV output file for each selected columns to resolve 1:n relationships
+  if prefix != "":
+    recordID = recordData[config["recordIDColumnName"]]
+
+    for columnName, valueList in recordData.items():
+
+      # this is a content column specified in "dataFields" (not the ID column)
+      if valueList and columnName != config["recordIDColumnName"]:
+
+
+        # simple 1:n relationship: one row per value
+        # but it is one dictionary per relationship, 
+        # because we eventually have a whole dictionary with subfields like the parsed value and the original value
+        for v in valueList:
+
+          # skip if none, e.g. if {"birthDate": {"birthDate": None} }
+          if any(v.values()):
+
+            # We have to do the splitCharacter check, either on field or subfields
+            # first, are there subfields?
+            if columnName in columnTypes and columnTypes[columnName] == 'json':
+              # yes we have subfields, does any of the subfields have a split character?
+              # example if subfields: v = {'place': 'Ghent ; Gent', 'country': 'Belgium ; België'}
+              if columnName in subFieldSplitCharacters:
+                subSplitConfig = subFieldSplitCharacters[columnName]
+                jsonRows = split_values_with_config(v, subSplitConfig)
+
+                for row in jsonRows:
+                  outputRow = row
+                  outputRow.update({config["recordIDColumnName"]: identifierPrefix + recordID})
+                  files[columnName].writerow(outputRow)
+              else:
+                # no splitting needed, regular writing to output (like in the general else case)
+                outputRow = v
+                outputRow.update({config["recordIDColumnName"]: identifierPrefix + recordID})
+                files[columnName].writerow(outputRow)
+            else:
+              # no subfields, let's check if we have to split?
+              if columnName in splitCharacters and splitCharacters[columnName] != '':
+                # example no subfields: v = {'field': 'value1 ; value2'}
+                # there can be a separate key 'field-original', but we don't have to touch it
+                splittedValues = v[columnName].split(splitCharacters[columnName])
+                for s in splittedValues:
+                  if s != '':
+                    outputRow = v
+                    outputRow[columnName] = s.strip()
+                    outputRow.update({config["recordIDColumnName"]: identifierPrefix + recordID})
+                    files[columnName].writerow(outputRow)
+                     
+              else:
+                # no subfields and no splitting
+                outputRow = v
+                outputRow.update({config["recordIDColumnName"]: identifierPrefix + recordID})
+                files[columnName].writerow(outputRow)
+
+        #if isinstance(valueList, list):
+        #  pass
+        #elif isinstance(valueList, dict):
+        #  # complex 1:n relationship: one row per value, but subfields require multiple columns
+        #  # this data comes from valueType JSON
+        #  valueList.update({config["recordIDColumnName"]: recordID})
+        #  files[columnName].writerow(valueList)
+          
 
 
 
