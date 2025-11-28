@@ -181,11 +181,12 @@ class TestRecordProcessing(unittest.TestCase):
              tempfile.NamedTemporaryFile(mode='w+', delete=False) as fieldFile:
 
             mainOutputWriter = csv.DictWriter(mainOutFile, fieldnames=['autID', 'field', 'location'])
-            locationWriter = csv.DictWriter(fieldFile, fieldnames=['autID', 'place', 'country'])
+            locationWriter = csv.DictWriter(locationFile, fieldnames=['autID', 'place', 'country'])
             fieldWriter = csv.DictWriter(fieldFile, fieldnames=['autID', 'field'])
 
             mainOutputWriter.writeheader()
             fieldWriter.writeheader()
+            locationWriter.writeheader() 
 
             utils.processRecord(
                 xml_element,
@@ -199,16 +200,40 @@ class TestRecordProcessing(unittest.TestCase):
 
             mainOutFile.flush()
             fieldFile.flush()
+            locationFile.flush()
 
+            #print(locationFile.name)
+            #time.sleep(40)
             # Parse and return the actual processed field data
-            return helpers.getRecordsAsDict(mainOutFile.name), helpers.getRecordsAsDict(fieldFile.name)
+            return helpers.getRecordsAsDict(mainOutFile.name), helpers.getRecordsAsDict(fieldFile.name), helpers.getRecordsAsDict(locationFile.name)
 
 
  
     # -------------------------------------------------------------------------
+    def test_subfield_split_cartesian_product(self):
+        splitCharacters = {
+          'place': ';',
+          'country': '|'
+        }
+
+        data = {
+         'place': 'Ghent ; Gent',
+         'country': 'Belgium | België',
+         'type': 'city',
+        }
+        result = utils.split_values_with_config(data, splitCharacters)
+ 
+        self.assertEqual(len(result), 4, msg=f'The cartesian product should be 4')
+        self.assertDictEqual(result[0], {'place': 'Ghent', 'country': 'Belgium', 'type': 'city'}, msg=f'Combination should be Ghent, Belgium, city')
+        self.assertDictEqual(result[1], {'place': 'Ghent', 'country': 'België', 'type': 'city'}, msg=f'Combination should be Ghent, België, city')
+        self.assertDictEqual(result[2], {'place': 'Gent', 'country': 'Belgium', 'type': 'city'}, msg=f'Combination should be Gent, Belgium, city')
+        self.assertDictEqual(result[3], {'place': 'Gent', 'country': 'België', 'type': 'city'}, msg=f'Combination should be Gent, België, city')
+        
+
+    # -------------------------------------------------------------------------
     def test_record_single_field_single_value_no_split(self):
 
-        resultMain, resultField  = self._run_record_processing(TestRecordProcessing.singleElementWithSingleValue, TestRecordProcessing.nonSplitConfig)
+        resultMain, resultField, resultLocation  = self._run_record_processing(TestRecordProcessing.singleElementWithSingleValue, TestRecordProcessing.nonSplitConfig)
         
         self.assertEqual(len(resultField),1, msg='There should be only one record, but found {len(resultField)}')
         self.assertEqual(resultField[0]['field'], 'value', msg=f'Extracted value should be "value", but is {resultField[0]["field"]}')
@@ -216,7 +241,7 @@ class TestRecordProcessing(unittest.TestCase):
     # -------------------------------------------------------------------------
     def test_record_single_field_multiple_values_no_split(self):
 
-        resultMain, resultField = self._run_record_processing(TestRecordProcessing.singleElementWithMultipleValues, TestRecordProcessing.nonSplitConfig)
+        resultMain, resultField, resultLocation = self._run_record_processing(TestRecordProcessing.singleElementWithMultipleValues, TestRecordProcessing.nonSplitConfig)
         
         self.assertEqual(len(resultField),1, msg='There should be only one record, but found {len(resultField)}')
         self.assertEqual(resultField[0]['field'], 'value1 ; value2', msg=f'Extracted value should be "value", but is {resultField[0]["field"]}')
@@ -224,7 +249,7 @@ class TestRecordProcessing(unittest.TestCase):
     # -------------------------------------------------------------------------
     def test_record_single_field_multiple_values_split(self):
 
-        resultMain, resultField = self._run_record_processing(TestRecordProcessing.singleElementWithMultipleValues, TestRecordProcessing.splitConfig)
+        resultMain, resultField, resultLocation = self._run_record_processing(TestRecordProcessing.singleElementWithMultipleValues, TestRecordProcessing.splitConfig)
         
         self.assertEqual(len(resultField),2, msg='There should be two records (from a single field), but found {len(resultField)}')
         self.assertEqual(resultField[0]['field'], 'value1', msg=f'Extracted value should be "value1", but is {resultField[0]["field"]}')
@@ -234,7 +259,7 @@ class TestRecordProcessing(unittest.TestCase):
     # -------------------------------------------------------------------------
     def test_record_multiple_fields_single_value_split(self):
 
-        resultMain, resultField = self._run_record_processing(TestRecordProcessing.multipleElementsWithSingleValue, TestRecordProcessing.splitConfig)
+        resultMain, resultField, resultLocation = self._run_record_processing(TestRecordProcessing.multipleElementsWithSingleValue, TestRecordProcessing.splitConfig)
 
         self.assertEqual(len(resultField),2, msg='There should be two records (from two fields), but found {len(resultField)}')
         self.assertEqual(resultField[0]['field'], 'value1', msg=f'Extracted value should be "value1", but is {resultField[0]["field"]}')
@@ -243,7 +268,7 @@ class TestRecordProcessing(unittest.TestCase):
     # -------------------------------------------------------------------------
     def test_record_multiple_fields_single_value_no_split(self):
 
-        resultMain, resultField = self._run_record_processing(TestRecordProcessing.multipleElementsWithSingleValue, TestRecordProcessing.nonSplitConfig)
+        resultMain, resultField, resultLocation = self._run_record_processing(TestRecordProcessing.multipleElementsWithSingleValue, TestRecordProcessing.nonSplitConfig)
 
         self.assertEqual(len(resultField),2, msg='There should be two records (from two fields), but found {len(resultField)}')
         self.assertEqual(resultField[0]['field'], 'value1', msg=f'Extracted value should be "value1", but is {resultField[0]["field"]}')
@@ -253,7 +278,7 @@ class TestRecordProcessing(unittest.TestCase):
     # -------------------------------------------------------------------------
     def test_record_multiple_fields_multiple_values_no_split(self):
 
-        resultMain, resultField = self._run_record_processing(TestRecordProcessing.multipleElementsWithMultipleValues, TestRecordProcessing.nonSplitConfig)
+        resultMain, resultField, resultLocation = self._run_record_processing(TestRecordProcessing.multipleElementsWithMultipleValues, TestRecordProcessing.nonSplitConfig)
 
         self.assertEqual(len(resultField),2, msg='There should be two records (from two fields), but found {len(resultField)}')
         self.assertEqual(resultField[0]['field'], 'value1 ; value2', msg=f'Extracted value should be "value1 ; value2", but is {resultField[0]["field"]}')
@@ -262,7 +287,7 @@ class TestRecordProcessing(unittest.TestCase):
     # -------------------------------------------------------------------------
     def test_record_multiple_fields_multiple_values_split(self):
 
-        resultMain, resultField = self._run_record_processing(TestRecordProcessing.multipleElementsWithMultipleValues, TestRecordProcessing.splitConfig)
+        resultMain, resultField, resultLocation = self._run_record_processing(TestRecordProcessing.multipleElementsWithMultipleValues, TestRecordProcessing.splitConfig)
 
         self.assertEqual(len(resultField),3, msg='There should be two records (from two fields), but found {len(resultField)}')
         self.assertEqual(resultField[0]['field'], 'value1', msg=f'Extracted value should be "value1", but is {resultField[0]["field"]}')
@@ -272,7 +297,7 @@ class TestRecordProcessing(unittest.TestCase):
     # -------------------------------------------------------------------------
     def test_record_single_field_multiple_values_broken_split(self):
 
-        resultMain, resultField = self._run_record_processing(TestRecordProcessing.elementWithMissingSplit, TestRecordProcessing.splitConfig)
+        resultMain, resultField, resultLocation = self._run_record_processing(TestRecordProcessing.elementWithMissingSplit, TestRecordProcessing.splitConfig)
 
         self.assertEqual(len(resultField),1, msg='There should be only one record, but found {len(resultField)}')
         self.assertEqual(resultField[0]['field'], 'value1', msg=f'Extracted value should be "value", but is {resultField[0]["field"]}')
@@ -280,19 +305,31 @@ class TestRecordProcessing(unittest.TestCase):
     # -------------------------------------------------------------------------
     def test_record_multiple_fields_multiple_values_subfields_split(self):
 
-        resultMain, resultField = self._run_record_processing(TestRecordProcessing.multipleElementsWithSubfields, TestRecordProcessing.splitConfig)
-        print(resultField)
-        self.assertEqual(len(resultField),4, msg='There should be four records, but found {len(resultField)}')
-        self.assertEqual(resultField[0]['place'], 'Ghent', msg=f'Extracted value should be "Ghent", but is {resultField[0]["place"]}')
-        self.assertEqual(resultField[0]['country'], 'Belgium', msg=f'Extracted value should be "Belgium", but is {resultField[0]["country"]}')
-        self.assertEqual(resultField[1]['place'], 'Ghent', msg=f'Extracted value should be "Ghent", but is {resultField[1]["place"]}')
-        self.assertEqual(resultField[1]['country'], 'België', msg=f'Extracted value should be "België", but is {resultField[1]["country"]}')
+        resultMain, resultField, resultLocation = self._run_record_processing(TestRecordProcessing.multipleElementsWithSubfields, TestRecordProcessing.splitConfig)
+        self.assertEqual(len(resultLocation),5, msg='There should be four records, but found {len(resultLocation)}')
+        self.assertEqual(resultLocation[0]['place'], 'Ghent', msg=f'Extracted value should be "Ghent", but is {resultLocation[0]["place"]}')
+        self.assertEqual(resultLocation[0]['country'], 'Belgium', msg=f'Extracted value should be "Belgium", but is {resultLocation[0]["country"]}')
+        self.assertEqual(resultLocation[1]['place'], 'Ghent', msg=f'Extracted value should be "Ghent", but is {resultLocation[1]["place"]}')
+        self.assertEqual(resultLocation[1]['country'], 'België', msg=f'Extracted value should be "België", but is {resultLocation[1]["country"]}')
 
-        self.assertEqual(resultField[2]['place'], 'Gent', msg=f'Extracted value should be "Ghent", but is {resultField[2]["place"]}')
-        self.assertEqual(resultField[2]['country'], 'Belgium', msg=f'Extracted value should be "Belgium", but is {resultField[2]["country"]}')
-        self.assertEqual(resultField[3]['place'], 'Gent', msg=f'Extracted value should be "Ghent", but is {resultField[3]["place"]}')
-        self.assertEqual(resultField[3]['country'], 'België', msg=f'Extracted value should be "België", but is {resultField[3]["country"]}')
+        self.assertEqual(resultLocation[2]['place'], 'Gent', msg=f'Extracted value should be "Ghent", but is {resultLocation[2]["place"]}')
+        self.assertEqual(resultLocation[2]['country'], 'Belgium', msg=f'Extracted value should be "Belgium", but is {resultLocation[2]["country"]}')
+        self.assertEqual(resultLocation[3]['place'], 'Gent', msg=f'Extracted value should be "Ghent", but is {resultLocation[3]["place"]}')
+        self.assertEqual(resultLocation[3]['country'], 'België', msg=f'Extracted value should be "België", but is {resultLocation[3]["country"]}')
 
+        self.assertEqual(resultLocation[4]['place'], 'Brussels', msg=f'Extracted value should be "Brussels", but is {resultLocation[4]["place"]}')
+        self.assertEqual(resultLocation[4]['country'], 'Belgium', msg=f'Extracted value should be "Belgium", but is {resultLocation[4]["country"]}')
+
+    # -------------------------------------------------------------------------
+    def test_record_multiple_fields_multiple_values_subfields_no_split(self):
+
+        resultMain, resultField, resultLocation = self._run_record_processing(TestRecordProcessing.multipleElementsWithSubfields, TestRecordProcessing.nonSplitConfig)
+        self.assertEqual(len(resultLocation),2, msg='There should be two records, but found {len(resultLocation)}')
+        self.assertEqual(resultLocation[0]['place'], 'Ghent ; Gent', msg=f'Extracted value should be "Ghent ; Gent", but is {resultLocation[0]["place"]}')
+        self.assertEqual(resultLocation[0]['country'], 'Belgium ; België', msg=f'Extracted value should be "Belgium ; België", but is {resultLocation[0]["country"]}')
+
+        self.assertEqual(resultLocation[1]['place'], 'Brussels', msg=f'Extracted value should be "Brussels", but is {resultLocation[1]["place"]}')
+        self.assertEqual(resultLocation[1]['country'], 'Belgium', msg=f'Extracted value should be "Belgium", but is {resultLocation[1]["country"]}')
 
 
 

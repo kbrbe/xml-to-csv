@@ -4,6 +4,7 @@ import gc
 import lxml.etree as ET
 import unicodedata as ud
 import logging
+import itertools
 from io import BytesIO
 import csv
 import os
@@ -889,6 +890,25 @@ def fix_encoding(text):
         return text
 
 # -----------------------------------------------------------------------------
+def split_values_with_config(data, splitConfig):
+    processed = {}
+
+    for key, value in data.items():
+        if key in splitConfig:
+            delimiter = splitConfig[key]
+            processed[key] = [v.strip() for v in value.split(delimiter) if v.strip()]
+        else:
+            # no split for this field
+            processed[key] = [value.strip()]
+    
+    # Cartesian product
+    return [
+        dict(zip(processed.keys(), combo))
+        for combo in itertools.product(*processed.values())
+    ]
+
+
+# -----------------------------------------------------------------------------
 def getValueList(elem, config, configKey, dateConfig, monthMapping):
   """This function extracts all values from the XML element elem according to the config
   Example output: {'isni': '', 'bnf': '', 'name': [{'name': 'Hayashi Motoharu'}], 'birthDate': [{'birthDate': '1858', 'rule': 'simplePattern'}], 'deathDate': [{'deathDate': None}], 'birthPlace': [{'birthTown': 'Osaka', 'birthCountry': 'Japon'}], 'deathPlace': '', 'autID': '6840'}
@@ -1065,7 +1085,20 @@ def processRecord(elem, config, dateConfig, monthMapping, outputWriter, files, p
   outputWriter.writerow(outputRow)
 
   splitCharacters = {c['columnName']: c['splitCharacter'] for c in config['dataFields'] if 'splitCharacter' in c }
+  splitCharactersSubfields = {c['columnName']: c['splitCharacter'] for c in config['dataFields'] if 'splitCharacter' in c }
   columnTypes = {c['columnName']: c['valueType'] for c in config['dataFields'] if 'valueType' in c }
+
+  subFieldSplitCharacters = {}
+
+  for field in config["dataFields"]:
+    if field.get("valueType") == "json":
+        subSplits = {
+            sf["columnName"]: sf["splitCharacter"]
+            for sf in field.get("subfields", [])
+            if "splitCharacter" in sf
+        }
+        if subSplits:
+            subFieldSplitCharacters[field["columnName"]] = subSplits
 
   # (2) Create a CSV output file for each selected columns to resolve 1:n relationships
   if prefix != "":
@@ -1086,12 +1119,25 @@ def processRecord(elem, config, dateConfig, monthMapping, outputWriter, files, p
           if any(v.values()):
 
             # We have to do the splitCharacter check, either on field or subfields
+            # first, are there subfields?
             if columnName in columnTypes and columnTypes[columnName] == 'json':
-              # yes we have subfields, check splitCharacter per subfield
+              # yes we have subfields, does any of the subfields have a split character?
               # example if subfields: v = {'place': 'Ghent ; Gent', 'country': 'Belgium ; België'}
-              pass
+              if columnName in subFieldSplitCharacters:
+                subSplitConfig = subFieldSplitCharacters[columnName]
+                jsonRows = split_values_with_config(v, subSplitConfig)
+
+                for row in jsonRows:
+                  outputRow = row
+                  outputRow.update({config["recordIDColumnName"]: identifierPrefix + recordID})
+                  files[columnName].writerow(outputRow)
+              else:
+                # no splitting needed, regular writing to output (like in the general else case)
+                outputRow = v
+                outputRow.update({config["recordIDColumnName"]: identifierPrefix + recordID})
+                files[columnName].writerow(outputRow)
             else:
-              # no subfields, do we have to split?
+              # no subfields, let's check if we have to split?
               if columnName in splitCharacters and splitCharacters[columnName] != '':
                 # example no subfields: v = {'field': 'value1 ; value2'}
                 # there can be a separate key 'field-original', but we don't have to touch it
