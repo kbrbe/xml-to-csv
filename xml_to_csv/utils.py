@@ -932,6 +932,12 @@ def getValueList(elem, config, configKey, dateConfig, monthMapping):
   >>> elem1 = ET.fromstring("<record><id>1</id><name><firstName>Jean</firstName><lastName>MÃ©ridionaux</lastName></name></record>")
   >>> getValueList(elem1, config1, configKey, {}, {})
   {'name': [{'lastName': 'Méridionaux'}], 'id': '1'}
+
+  Existing empty tags should be handled properly (https://github.com/kbrbe/xml-to-csv/issues/28)
+  >>> config2 = {"recordIDExpression": "./id", "recordIDColumnName": "id", "dataFields": [{"columnName": "alternateName", "expression": "./alternateName", "valueType": "text"}]}
+  >>> elem2 = ET.fromstring("<record><id>1</id><alternateName></alternateName></record>")
+  >>> getValueList(elem2, config2, configKey, {}, {})
+  {'alternateName': [{'alternateName': None}], 'id': '1'}
   """
 
   keyParts = []
