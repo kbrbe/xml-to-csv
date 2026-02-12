@@ -151,6 +151,7 @@ class TestRecordProcessing(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        cls.singleElementWithEmptyTag = ET.fromstring("<record><id>1</id><field></field></record>")
         cls.singleElementWithSingleValue = ET.fromstring("<record><id>1</id><field>value</field></record>")
         cls.singleElementWithMultipleValues = ET.fromstring("<record><id>1</id><field>value1 ; value2</field></record>")
         cls.multipleElementsWithSingleValue = ET.fromstring("<record><id>1</id><field>value1</field><field>value2</field></record>")
@@ -331,6 +332,11 @@ class TestRecordProcessing(unittest.TestCase):
         self.assertEqual(resultLocation[1]['place'], 'Brussels', msg=f'Extracted value should be "Brussels", but is {resultLocation[1]["place"]}')
         self.assertEqual(resultLocation[1]['country'], 'Belgium', msg=f'Extracted value should be "Belgium", but is {resultLocation[1]["country"]}')
 
+    # -------------------------------------------------------------------------
+    def test_record_empty_tag(self):
+        """Test issue https://github.com/kbrbe/xml-to-csv/issues/28"""
+        resultMain, resultField, resultLocation = self._run_record_processing(TestRecordProcessing.singleElementWithEmptyTag, TestRecordProcessing.splitConfig)
+        self.assertEqual(resultMain[0]['field'], '', msg=f'Extracted value should be empty string, but is {resultMain[0]["field"]}')
 
 
 # -----------------------------------------------------------------------------
