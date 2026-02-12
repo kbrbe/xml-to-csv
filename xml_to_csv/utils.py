@@ -1073,19 +1073,24 @@ def processRecord(elem, config, dateConfig, monthMapping, outputWriter, files, p
       if extractedValues:
         # there are one or more results for this column
         for valueDict in extractedValues:
-          if columnName in valueDict and 'rule' not in valueDict:
-            # the result contains a subfield with the same name as the column
-            # i.e. not type json, but a regular column with possible original
-            for valueColumnName, singleValue in valueDict.items():
-              singleValue = singleValue if singleValue else ''
-              if valueColumnName in outputRow:
-                outputRow[valueColumnName].append(singleValue)
-              else:
-                outputRow[valueColumnName] = [singleValue]
+          # Handle empty values (see 'else') https://github.com/kbrbe/xml-to-csv/issues/28
+          if any(valueDict.values()):
+            if columnName in valueDict and 'rule' not in valueDict:
+              # the result contains a subfield with the same name as the column
+              # i.e. not type json, but a regular column with possible original
+              for valueColumnName, singleValue in valueDict.items():
+                singleValue = singleValue if singleValue else ''
+                if valueColumnName in outputRow:
+                  outputRow[valueColumnName].append(singleValue)
+                else:
+                  outputRow[valueColumnName] = [singleValue]
 
+            else:
+              # the result contains subfields (i.e. type json), write as-is
+              outputRow[columnName].append(valueDict)
           else:
-            # the result contains subfields (i.e. type json), write as-is
-            outputRow[columnName].append(valueDict)
+            # We got something like {'field': None}, this should be an empty string
+            outputRow[columnName] = ''
       else:
         outputRow[columnName] = ''
   outputWriter.writerow(outputRow)
