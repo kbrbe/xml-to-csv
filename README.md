@@ -43,7 +43,12 @@ For the config example the following files will be created
 The file `my-date.csv` is the general output file in which every column besides the identifier column is an array containing possible 1:n relationships.
 The other files contain 1:n relationships between each record and the values of a single column of the output.
 
-### LICENSE
+
+### Tests
+
+To execute the tests use the command `python -m unittest discover test/`
+
+## LICENSE
 
 This script makes use of the following other software libraries.
 
